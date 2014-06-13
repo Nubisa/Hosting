@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<module>
+  <id>jxcore_support</id>
+  <name>JXcore Support</name>
+  <description>This module adds JXcore support for domains</description>
+  <version>2</version>
+  <release>1</release>
+  <vendor>Nubisa, Inc.</vendor>
+  <plesk_min_version>11.0.1</plesk_min_version>
+</module>
