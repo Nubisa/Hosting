@@ -57,6 +57,11 @@ class Common
     private static $controller = null;
     private static $status = null;
 
+    private static $buttonsDisabling = [];
+
+    private static $domains = [];
+    private static $domainsFetched = false;
+
     function Common($controller, $status = null)
     {
         self::$controller = $controller;
@@ -65,12 +70,43 @@ class Common
         self::refreshValues();
     }
 
+    public static function getDomain($id) {
+        self::getDomains();
+        return self::$domains[$id] ? self::$domains[$id] : null;
+    }
+
+    public static function getDomainsIDs () {
+        self::getDomains();
+        return array_keys(self::$domains);
+    }
+
+    /**
+     * Reads domain list from database - does this only once per page refresh
+     * @return array
+     */
+    private static function getDomains() {
+        if (!self::$domainsFetched) {
+            // fetching domain list
+            $dbAdapter = pm_Bootstrap::getDbAdapter();
+            $sql = "SELECT d.*, h.www_root FROM domains d left outer join hosting h on d.id = h.dom_id where htype = 'vrt_hst' order by id ASC";
+
+            $statement = $dbAdapter->query($sql);
+
+            while ($row = $statement->fetch()) {
+                self::$domains[intval($row['id'])] = DomainInfo::getFromRow($row);
+            }
+            self::$domainsFetched = true;
+        }
+        return self::$domains;
+    }
+
 
     public static function refreshValues()
     {
         self::$urlListDomains = pm_Context::getBaseUrl() . "index.php/index/listdomains";
-        self::$urlMonitor = "http://127.0.0.1:17777/json?silent=true";
-        self::$urlMonitorLog = "http://127.0.0.1:17777/logs";
+//        self::$urlMonitor = "http://localhost:17777/json?silent=true";
+        self::$urlMonitor = "http://localhost:17777/json";
+        self::$urlMonitorLog = "http://localhost:17777/logs";
         self::$urlJXcoreConfig = pm_Context::getBaseUrl() . "index.php/index/jxcore";
         self::$urlDomainConfig = pm_Context::getBaseUrl() . "index.php/domain/config";
         self::$urlDomainAppLog = pm_Context::getBaseUrl() . "index.php/domain/log";
@@ -137,6 +173,8 @@ class Common
 
         self::$jxv = null;
         self::$jxpath = null;
+
+        self::refreshValues();
     }
 
     public static function saveBlockToText($contents, $blockName, $blockBody, $beginning)
@@ -192,15 +230,14 @@ class Common
      */
     public static function getTakenAppPorts($domainId = null, $clientId = null)
     {
-        $rows = self::getDomainData();
+        $rows = self::$domains;
 
         $portsTaken = [];
-        foreach ($rows as $row) {
-            $id = $row['id'];
+        foreach ($rows as $id=>$domain) {
             if ($domainId && $id == $domainId) continue;
-            if ($clientId && $row['cl_id'] != $clientId) continue;
+            if ($clientId && $domain->row['cl_id'] != $clientId) continue;
             // array of strings
-            $port = pm_Settings::get(self::sidDomainJXcoreAppPort . $row['id']);
+            $port = pm_Settings::get(self::sidDomainJXcoreAppPort . $domain->row['id']);
             if ($port && ctype_digit($port))
                 $portsTaken[] = $port;
         }
@@ -256,27 +293,6 @@ class Common
     }
 
 
-    /**
-     * Returns contents of MYSQL table: domains.
-     * @param $columns
-     * @return array
-     */
-    public static function getDomainData($columns = null)
-    {
-        if (!$columns) $columns = "*";
-
-        $dbAdapter = pm_Bootstrap::getDbAdapter();
-        $sql = "SELECT $columns FROM domains order by id ASC";
-
-        $statement = $dbAdapter->query($sql);
-
-        $ret = [];
-        while ($row = $statement->fetch()) {
-            $ret[] = $row;
-        }
-        return $ret;
-    }
-
     public static function updateBatchAndCron($domainId = null)
     {
         // first we write a batch, which will be executed by cron
@@ -292,17 +308,15 @@ class Common
                 "./jx monitor start"
             ];
 
-            $rows = self::getDomainData();
-            foreach ($rows as $row) {
-                $id = $row['id'];
-
-                $domain = new DomainInfo($id);
-                $client = new PanelClient($row['cl_id']);
+            foreach (self::$domains as $id=>$domain) {
+                $domain = Common::getDomain($id);
+                $client = new PanelClient($domain->row['cl_id']);
 //                self::$status->addMessage("info", "user clid {$row['cl_id']}, sysUser {$client->sysUser}");
 
                 $enabled = $domain->JXcoreSupportEnabled();
                 $path = $domain->getAppPath(true);
 
+                $out = null;
                 $spawner = $domain->getSpawnerPath($out);
                 if ($spawner === false) {
                     self::$status->addMessage("error", $out);
@@ -327,7 +341,7 @@ class Common
                 }
 
                 // stopping or launching application, if provided with the argument $domainId
-                if ($domainId && $domainId === $id) {
+                if ($domainId && intval($domainId) === $id) {
 
                     $json = null;
                     $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
@@ -382,7 +396,8 @@ class Common
         if (trim($contents) === "") {
             @exec("$binary remove root");
         } else {
-            file_put_contents($tmpfile, $contents);
+            // a NewLine characted was needed on Nubisa's production server
+            file_put_contents($tmpfile, $contents . "\n");
             @exec("$binary set root $tmpfile", $out, $ret);
             if ($ret) {
                 self::$status->addMessage("error", "Cannot change root's crontab: " . join("\n", $out) . ". Exit code: $ret");
@@ -440,10 +455,12 @@ class Common
         $cmd = $timing . " * " . Common::$startupBatchPath;
         $contents = Common::saveBlockToText($contents, "JXcore-immediate", $remove ? "" : $cmd, null);
 
+        // a NewLine characted was needed on Nubisa's production server
+        $contents = trim($contents) . "\n";
         file_put_contents($tmpfile, $contents);
         @exec("$binary set root $tmpfile 2>&1", $out, $ret);
         if ($ret) {
-            self::$status->addMessage("error", "Cannot set immediate crontab job: " . join("\n", $out) . $cmd);
+            self::$status->addMessage("error", "Cannot set immediate crontab job (arg = {$remove}): " . join("\n", $out) . $cmd);
             return;
         }
 
@@ -480,7 +497,7 @@ class Common
                 if ($diff < -15) {
                     // error - monitor did not start after 15 secs
                     self::updateCronImmediate(true);
-                    self::$status->addMessage("error", "Could not start the JXcore monitor.");
+                    self::$status->addMessage("error", "Could not start the JXcore monitor with crontab.");
                 }
 
             }
@@ -492,7 +509,7 @@ class Common
     public static function updatehtaccess($domainId)
     {
         $mgr = new pm_FileManager($domainId);
-        $domain = new DomainInfo($domainId);
+        $domain = self::$domains[$domainId];
 
         $basename = ".htaccess";
         $file = $domain->rootFolder . $basename;
@@ -576,20 +593,51 @@ class Common
     {
         $style = "vertical-align: middle; display: inline-block;";
         $iconStyle = "style=\"$style margin-right: 7px;\"";
-        $icon = $iconURL ? "<img class='tootlipObserved' src='$iconURL' height='16' width='16' $iconStyle>" : "";
+        $iconId = "jx-icon-{$varName}-" . count(self::$buttonsDisabling);
+        $icon = $iconURL ? "<img id=\"$iconId\" name=\"$iconId\" class='tootlipObserved' src='$iconURL' height='16' width='16' $iconStyle>" : "";
 
         if (!$url) {
             // form
             $btnstyle = "style='height: 15px; margin-left: 20px; margin-bottom: 6px; margin-top: 6px; $style $additionalStyle'";
             $onclick = "href=\"#\"";
-            if ($command) $onclick .= " onclick=\"document.getElementById('{$varName}').value = '{$command}'; document.getElementById('pm-form-simple').submit();\"";
+            if ($command) $onclick .= " onclick=\"document.getElementById('{$varName}').value = '{$command}'; if (JXDisableButtons) { JXDisableButtons(); }; document.getElementById('pm-form-simple').submit();\"";
         } else {
             // list
             $btnstyle = "style='height: 15px; margin-left: 20px; $style $additionalStyle'";
             $onclick = "href=\"$url\"";
         }
 
-        return "<a class='btn' $onclick $btnstyle>{$icon}{$caption}</a>";
+        $id = "jx-btn-{$varName}-" . count(self::$buttonsDisabling);
+
+        $script = "var el = document.getElementById('{$id}');";
+        $script .= "if (el) { el.className = 'btn disabled'; delete el.href; el.onclick = 'return false;' }";
+        // finding the disabled version of the icon
+        if ($iconURL) {
+            list( $dirname, $basename, $extension, $filename ) = array_values( @pathinfo($iconURL) );
+            $fname = "/usr/local/psa/admin/htdocs/theme/icons/16/plesk/" . $filename . "-disabled." . $extension;
+//            self::$status->addMessage("warning", $fname);
+            if (@file_exists($fname)) {
+                $script .= "var img = document.getElementById('{$iconId}');";
+                $script .= "if (img) img.src = \"" . str_replace( "{$filename}.{$extension}", "{$filename}-disabled.$extension", $iconURL)."\";";
+            }
+        }
+        self::$buttonsDisabling[] = $script;
+
+
+        return "<a id=\"$id\" name=\"$id\" class='btn' $onclick $btnstyle>{$icon}{$caption}</a>";
+    }
+
+    public static function getButtonsDisablingScript() {
+        $arr = [];
+        $arr[] = "<script type=\"text/javascript\">";
+        $arr[] = "function JXDisableButtons() {";
+
+        $arr = array_merge($arr, self::$buttonsDisabling);
+
+        $arr[] = "}";
+        $arr[] = "</script>";
+
+        return join("\n", $arr);
     }
 }
 
@@ -607,43 +655,46 @@ class DomainInfo
     const appLogBasename = "JX_log.html";
     const appPath_default = "index.js";
 
-    function DomainInfo($id)
+    public $row = null;
+
+    public $log = [];
+
+    public static function getFromRow($row) {
+        $domain = new DomainInfo($row['id']);
+        $domain->rootFolder = $row['www_root'] . "/";
+        $domain->appLogPath = $domain->rootFolder . self::appLogBasename;
+        $domain->row = $row;
+        return $domain;
+    }
+
+    private function DomainInfo($id)
     {
         $this->domain = new pm_Domain($id);
         $this->fileManager = new pm_FileManager($id);
         $this->id = $id;
         $this->name = $this->domain->getName();
-
-        $this->rootFolder = $this->getDomainRootFolder();
-        $this->appLogPath = $this->rootFolder . "httpdocs/" . self::appLogBasename;
-
-//        if (!file_exists($this->appLogPath)) {
-//            $rel = str_replace($this->fileManager->getFilePath(), "", $this->rootFolder) . self::appLogBasename;
-//            var_dump($this->rootFolder, $rel);
-//            $this->fileManager->filePutContents($rel, "");
-//        }
     }
 
-    /**
-     * Returns root directory for domain, e.g. /var/www/vhosts/local.domain
-     * @param $domainId
-     * @return null|string
-     */
-    private function getDomainRootFolder()
-    {
-        // subdomain
-        $path1 = $this->fileManager->getFilePath() . $this->name . "/";
-        // domain
-        $path2 = $this->fileManager->getFilePath();
-
-        if (file_exists($path1))
-            return $path1;
-        else
-            if (file_exists($path2))
-                return $path2;
-            else
-                return null;
-    }
+//    /**
+//     * Returns root directory for domain, e.g. /var/www/vhosts/local.domain
+//     * @param $domainId
+//     * @return null|string
+//     */
+//    private function getDomainRootFolder()
+//    {
+//        // domain
+//        $path2 = $this->fileManager->getFilePath(".");
+//        // subdomain
+//        $path1 =  $path2. $this->name . "/";
+//
+//        if (is_dir($path1))
+//            return $path1;
+//        else
+//            if (is_dir($path2))
+//                return $path2;
+//            else
+//                return null;
+//    }
 
     public function isAppRunning($json = null)
     {
@@ -833,17 +884,16 @@ class DomainInfo
         foreach ($params as $key => $sid) {
             $val = pm_Settings::get($sid . $this->id);
             if (trim($val) != "") {
-                $arr[] = "\t\"{$key}\" : \"{$val}\"";
+                $arr[] = "\"{$key}\" : \"{$val}\"";
             }
         }
 
         foreach ($additionalParams as $key => $val) {
-            $arr[] = "\t\"{$key}\" : \"{$val}\"";
+            $arr[] = "\"{$key}\" : \"{$val}\"";
         }
 
-        $json = "{\n" . join(",\n", $arr) . "\n}";
-        $base64 = base64_encode($json);
-        return $base64;
+        $json = "'{ " . join(", ", $arr) . "}'";
+        return $json;
     }
 
     /**

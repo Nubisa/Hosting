@@ -27,12 +27,6 @@ class IndexController extends pm_Controller_Action
                 )
             );
 
-
-//            $this->view->tabs[] = array(
-//                'title' => 'Test',
-//                'action' => 'test'
-//            );
-
             $this->view->tabs[] = array(
                 'title' => 'Monitor log',
                 'action' => 'log'
@@ -89,58 +83,6 @@ class IndexController extends pm_Controller_Action
         $this->view->form = $form;
     }
 
-//    public function testAction()
-//    {
-//        if ($this->redirect()) return;
-//
-//        $form = new pm_Form_Simple();
-//
-//        $form->addElement('hidden', 'screen', array(
-//            'value' => 'afterIntro',
-//        ));
-//
-//        $form->addControlButtons(array(
-//            'cancelLink' => pm_Context::getModulesListUrl(),
-//            'hideLegend' => true
-//        ));
-//
-//        if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
-//
-////            $cmd = "cat /etc/psa/.psa.shadowcat | sudo -u krisuser -S " . Common::$jxpath . " /var/www/vhosts/krissubscription.com/index.js 2>&1 ";
-//            //$cmd = Common::$jxpath . " /var/www/vhosts/krissubscription.com/index.js 2>&1 ";
-//            //$cmd = Common::$jxpath . " /var/www/vhosts/krissubscription.com/index.js >> /dev/null &";
-//
-////            $cmd = "/opt/psa/admin/bin/crontabmng --help";
-//            // $cmd = "/opt/psa/admin/bin/crontabmng set root /tmp/x.x";
-//            //$cmd = "ps aux | grep /jx";
-//            $cmd = "pkill -9 jx";
-//            $cwd = getcwd();
-//            chdir(dirname(Common::$jxpath));
-////        @exec($cmd, $out, $ret);
-//            $ret = shell_exec($cmd);
-//            chdir($cwd);
-//
-////        if ($ret && $ret != 255) {
-////            $this->_status->addMessage('error', "Could not execute command: $cmd. Error code = $ret. " . join(", ", $out));
-////        }
-//
-//            $this->_status->addMessage('info', "$ret");
-//
-//
-//            //        $cmd = "useradd jxcore1 2>&1";
-////        $cmd = "whoami";
-////        $this->_status->addMessage('error', shell_exec($cmd));
-//////        $cmd = "usermod -p $(echo openaccess | openssl passwd -1 -stdin) jxcore1 2>&1";
-//////        $this->_status->addMessage('error', shell_exec($cmd));
-//
-////        Common::testUser();
-//
-//
-//            $this->_helper->json(array('redirect' => pm_Context::getBaseUrl() . "index.php/index/test"));
-//        }
-//
-//        $this->view->form = $form;
-//    }
 
     /**
      * Displays JXcore monitor log in panel's tab.
@@ -287,9 +229,10 @@ class IndexController extends pm_Controller_Action
                         "JXcore version specific for this platform will be downloaded and installed."
             ));
 
-            Common::addHr($form);
 
             if ($jxvalid) {
+
+                Common::addHr($form);
 
                 // monitor start / stop button
                 $form->addElement('hidden', $sidMonitor, array(
@@ -346,10 +289,12 @@ class IndexController extends pm_Controller_Action
                     'escape' => false
                 ));
 
-                $form->addControlButtons(array(
-                    'cancelLink' => pm_Context::getModulesListUrl(),
-                ));
+
             }
+
+            $form->addControlButtons(array(
+                'cancelLink' => pm_Context::getModulesListUrl(),
+            ));
 
 
             if ($req->isPost() && $form->isValid($req->getPost())) {
@@ -376,6 +321,7 @@ class IndexController extends pm_Controller_Action
             }
         }
 
+        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
         $this->view->form = $form;
         Common::check();
     }
@@ -393,21 +339,19 @@ class IndexController extends pm_Controller_Action
             return '<a href="' . $url . '">' . $str . '</a>';
         }
 
-        $rows = Common::getDomainData();
-
         $client = pm_Session::getClient();
         $clid = $client->getId();
 
         $data = array();
+        $ids = Common::getDomainsIDs();
         $cnt = 1;
-        foreach ($rows as $row) {
-            $id = $row['id'];
+        foreach ($ids as $id) {
+            $domain = Common::getDomain($id);
 
-            if (!Common::$isAdmin && $clid != $row['cl_id']) {
+            if (!Common::$isAdmin && $clid != $domain->row['cl_id']) {
                 continue;
             }
 
-            $domain = new DomainInfo($id);
             $domain->getAppPathOrDefault(false, true);
             $domain->getAppPortOrDefault(true);
 
@@ -441,13 +385,13 @@ class IndexController extends pm_Controller_Action
 //                Common::getButtonStartStop($status, "id", ["Enabled", "Enable"], ["Disabled", "Disable"], $switchUrl) :
 //                Common::getIcon($status, "Enabled", "Disabled");
 
-            $cl = new PanelClient($row['cl_id']);
+            $cl = new PanelClient($domain->row['cl_id']);
             $sysUser = $cl->sysUser;
 
             $data[] = array(
                 'column-1' => $id,
-                'column-2' => url($editUrl, $row['displayName']),
-                'column-3' => url($editUrl, $row['cr_date']),
+                'column-2' => url($editUrl, $domain->row['displayName']),
+                'column-3' => url($editUrl, $domain->row['cr_date']),
                 'column-4' => Common::getIcon($status, "Enabled", "Disabled"),
                 'column-5' => $domain->getAppPortStatus(),
                 'column-6' =>  $domain->getAppStatus(),

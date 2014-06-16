@@ -44,7 +44,7 @@ class DomainController extends pm_Controller_Action
             pm_Settings::set("currentDomainId", $this->ID);
         }
 
-        $this->domain = new DomainInfo(intval($this->ID));
+        $this->domain = Common::getDomain(intval($this->ID));
         $this->view->breadCrumb = 'Navigation: <a href="' . Common::$urlListDomains . '">Domains</a> -> ' . $this->domain->name;
     }
 
@@ -155,7 +155,7 @@ class DomainController extends pm_Controller_Action
         $validator->domainId = $this->ID;
 
 
-        $form->addElement($canEdit ? 'text' : 'simpleText', Common::sidDomainJXcoreAppPort, array(
+        $form->addElement($canEdit && Common::$isAdmin ? 'text' : 'simpleText', Common::sidDomainJXcoreAppPort, array(
             'label' => 'Application\'s port',
             'value' => $this->domain->getAppPortOrDefault(),
             'required' => true,
@@ -163,49 +163,49 @@ class DomainController extends pm_Controller_Action
                 'Int',
                 $validator
             ),
-            'description' => 'Port on which JXcore application is running.',
+            'description' => 'Port on which JXcore application is allowed to run.',
             'escape' => false
         ));
 
-        $form->addElement('simpleText', "portrange", array(
-            'label' => 'Available ports range',
-            'value' => Common::$minApplicationPort . " - " . Common::$maxApplicationPort,
-            'description' => "First five available ports: " . join(", ", Common::getFreePorts(null)),
-            'escape' => false
-        ));
+//        $form->addElement('simpleText', "portrange", array(
+//            'label' => 'Available ports range',
+//            'value' => Common::$minApplicationPort . " - " . Common::$maxApplicationPort,
+//            'description' => "First five available ports: " . join(", ", Common::getFreePorts(null)),
+//            'escape' => false
+//        ));
 
-        Common::addHR($form);
+//        Common::addHR($form);
 
-        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxCPULimit . $this->ID);
-        $form->addElement($canEdit ? 'text' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppMaxCPULimit : "cpu", array(
-            'label' => 'Max CPU',
-            'value' => $canEdit ? $val : ($val ? "$val %" : "disabled"),
-            'required' => false,
-            'validators' => array(
-                'Int', array("Between", true, array('min' => 1, 'max' => 100))
-            ),
-            'description' => 'Maximum CPU usage allowed for the application (percentage: 1-100).',
-            'escape' => false
-        ));
+//        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxCPULimit . $this->ID);
+//        $form->addElement($canEdit ? 'text' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppMaxCPULimit : "cpu", array(
+//            'label' => 'Max CPU',
+//            'value' => $canEdit ? $val : ($val ? "$val %" : "disabled"),
+//            'required' => false,
+//            'validators' => array(
+//                'Int', array("Between", true, array('min' => 1, 'max' => 100))
+//            ),
+//            'description' => 'Maximum CPU usage allowed for the application (percentage: 1-100).',
+//            'escape' => false
+//        ));
+//
+//        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxMemLimit . $this->ID);
+//        $form->addElement($canEdit ? 'text' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppMaxMemLimit : "mem", array(
+//            'label' => 'Max MEM',
+//            'value' => $canEdit ? $val : ($val ? "$val kb" : "disabled"),
+//            'required' => false,
+//            'validators' => array(
+//                'Int', //array("Between", true, array( 'min' => 1, 'max' => 100))
+//            ),
+//            'description' => 'Maximum size of memory allocated by the the application (kilobytes).',
+//            'escape' => false
+//        ));
 
-        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxMemLimit . $this->ID);
-        $form->addElement($canEdit ? 'text' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppMaxMemLimit : "mem", array(
-            'label' => 'Max MEM',
-            'value' => $canEdit ? $val : ($val ? "$val kb" : "disabled"),
-            'required' => false,
-            'validators' => array(
-                'Int', //array("Between", true, array( 'min' => 1, 'max' => 100))
-            ),
-            'description' => 'Maximum size of memory allocated by the the application (kilobytes).',
-            'escape' => false
-        ));
-
-        $val = pm_Settings::get(Common::sidDomainJXcoreAppAllowSpawnChild . $this->ID);
-        $form->addElement($canEdit ? 'checkbox' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppAllowSpawnChild : "child", array(
-            'label' => 'Prevent spawning other processes',
-            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow"),
-            'escape' => false
-        ));
+//        $val = pm_Settings::get(Common::sidDomainJXcoreAppAllowSpawnChild . $this->ID);
+//        $form->addElement($canEdit ? 'checkbox' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppAllowSpawnChild : "child", array(
+//            'label' => 'Prevent spawning other processes',
+//            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow"),
+//            'escape' => false
+//        ));
 
         $form->addElement('hidden', 'id', array(
             'value' => pm_Settings::get($this->ID),
@@ -230,16 +230,21 @@ class DomainController extends pm_Controller_Action
                 @exec($cmd, $out, $ret);
                 if ($ret && $ret != 77) {
                     $this->_status->addMessage($ret ? "error" : "info", "Cannot stop the application: " . join("\n", $out) . ". Exit code: $ret");
-                } //else {
+                }
+//                else {
 //                    $this->_status->addMessage("info", "Application is stopped.");
 //                }
                 // application will start in updateBatchAndCron()
             } else {
                 if ($canEdit) {
-                    $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainJXcoreAppPort, Common::sidDomainAppLogWebAccess,
-                        Common::sidDomainJXcoreAppMaxCPULimit, Common::sidDomainJXcoreAppMaxMemLimit,
-                        Common::sidDomainJXcoreAppAllowSpawnChild];
+                    $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess,
+                        // Common::sidDomainJXcoreAppMaxCPULimit, Common::sidDomainJXcoreAppMaxMemLimit,
+                        //  Common::sidDomainJXcoreAppAllowSpawnChild
+                    ];
 
+                    if (Common::$isAdmin) {
+                        $params[] = Common::sidDomainJXcoreAppPort;
+                    }
 
                 } else {
                     $params = [Common::sidDomainAppLogWebAccess];
@@ -252,7 +257,7 @@ class DomainController extends pm_Controller_Action
                 $this->_status->addMessage('info', 'Data was successfully saved.');
 
 
-                if (!file_exists($this->domain->getAppPath(false, true))) {
+                if (!file_exists($this->domain->getAppPath(true))) {
                     $this->_status->addMessage('warning', 'Application file does not exist on filesystem: ' . $this->domain->getAppPath());
                 }
 
@@ -265,6 +270,7 @@ class DomainController extends pm_Controller_Action
             $this->_helper->json(array('redirect' => Common::$urlDomainConfig));
         }
 
+        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
         $this->view->form = $form;
     }
 

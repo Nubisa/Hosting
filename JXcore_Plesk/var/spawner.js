@@ -3,86 +3,6 @@
  */
 
 
-// START : copy from monitor.js  - BLOCK TO BE REMOVED
-
-//var http = require('http');
-//
-//var sendRequest = function (path, jsonData, expectedAnswer, cb) {
-//
-//    var requestOptions = {
-//        host: '127.0.0.1',
-//        port: 17777,
-//        path: '/' + path,
-//        method: 'POST',
-//        headers: {
-//            'Content-Type': 'application/json',
-//            'Content-Length': 0
-//        }
-//    };
-//
-//    var str = JSON.stringify(jsonData);
-//    requestOptions.headers['Content-Length'] = str.length;
-//
-//    var req = http.request(requestOptions, function (res) {
-//
-//        res.setEncoding('utf-8');
-//
-//        var body = '';
-//
-//        res.on('data', function (data) {
-//            body += data;
-//        });
-//
-//        res.on('end', function () {
-//            if (cb) {
-//                if (body.toString().indexOf(expectedAnswer) === -1) {
-//                    var err = "Problem with connecting to the monitor. Received not what expected: " + body;
-//                    cb(true, err);
-//                } else {
-//                    cb(false, body);
-//                }
-//            }
-//
-//            req.connection.destroy();
-//        });
-//
-//        res.on('error', function (err) {
-//            if (cb) {
-//                cb(false, err);
-//            }
-//        });
-//    });
-//
-//    req.on('error', function (e) {
-//        if (cb) {
-//            cb(true, e);
-//        }
-//        req.connection.destroy();
-//    });
-//
-//    req.write(str);
-//    req.end();
-//};
-//
-//
-//var subscribe = function (pid) {
-//    var json = { pid: pid, path: cmd[0], argv: cmd,
-//        config: null, threadIDs: [-1] };
-//
-//    console.log("sending", json);
-//    sendRequest("sending_data", json, "thanks_for_sending_the_data", function (err, msg) {
-//        console.log(err ? "Cannot subscribe: " + msg : "Subscribed: " + msg);
-//
-//        if (err) process.exit();
-//    });
-//};
-
-
-// END : copy from monitor.js
-
-// usage:
-// > jx spawner.js -u krisuser -log "log_path.txt" app.js
-
 var fs = require("fs");
 var path = require("path");
 var os = require("os");
@@ -109,13 +29,9 @@ var log = function(str, error) {
 
 
 var options = null;
-var optionsOrg = null;
 var pos = process.argv.indexOf("-opt");
 if (pos > -1 && process.argv[pos + 1]) {
-    optionsOrg = process.argv[pos + 1];
-    var buf = new Buffer(optionsOrg, 'base64');
-    var decoded = buf.toString();
-
+    var decoded = process.argv[pos + 1];
     console.log('decoded', decoded);
     options = JSON.parse(decoded);
     console.log('options', options);
