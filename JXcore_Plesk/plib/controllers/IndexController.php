@@ -157,6 +157,9 @@ class IndexController extends pm_Controller_Action
 
             if (!Common::isJXValid()) {
                 $out = null;
+
+                Common::enableHttpProxy();
+
                 $ok = $this->download_JXcore($out);
                 $this->_status->addMessage($ok ? 'info' : 'error', $out);
 
@@ -239,10 +242,13 @@ class IndexController extends pm_Controller_Action
                     'value' => 'nothing',
                 ));
 
-
+                $cronAction = pm_Settings::get(Common::sidMonitorStartScheduledByCronAction);
                 $ret = Common::checkCronScheduleStatus(false);
-                if ($ret && $ret > 0 && !$monitorRunning) {
-                    $btn = Common::getIcon($monitorRunning, "Online", "Offline") . "<div> Monitor is scheduled to be launched in $ret seconds.</div>";
+                if ($ret && $ret > 0) {
+                    if ($cronAction == "start")
+                        $btn = Common::getIcon($monitorRunning, "Online", "Offline") . "<div> Monitor is scheduled to be launched in $ret seconds.</div>";
+                    else  if ($cronAction == "stop")
+                         $btn = Common::getIcon($monitorRunning, "Online", "Offline") . "<div> Monitor is scheduled to be stopped in $ret seconds.</div>";
                 } else {
                     $btn = Common::getButtonStartStop($monitorRunning, $sidMonitor, ["Online", "Start"], ["Offline", "Stop"]);
                 }
@@ -276,7 +282,6 @@ class IndexController extends pm_Controller_Action
                     'escape' => false
                 ));
 
-
                 $form->addElement('text', Common::sidJXcoreMaximumPortNumber, array(
                     'label' => 'Maximum app port number',
                     'value' => Common::$maxApplicationPort,
@@ -289,13 +294,10 @@ class IndexController extends pm_Controller_Action
                     'escape' => false
                 ));
 
-
+                $form->addControlButtons(array(
+                    'cancelLink' => pm_Context::getModulesListUrl(),
+                ));
             }
-
-            $form->addControlButtons(array(
-                'cancelLink' => pm_Context::getModulesListUrl(),
-            ));
-
 
             if ($req->isPost() && $form->isValid($req->getPost())) {
 
@@ -353,7 +355,8 @@ class IndexController extends pm_Controller_Action
             }
 
             $domain->getAppPathOrDefault(false, true);
-            $domain->getAppPortOrDefault(true);
+            $domain->getAppPortOrDefault(true, false);
+            $domain->getAppPortOrDefault(true, true);
 
             $status = $domain->JXcoreSupportEnabled();
             if ($status != 1) $status = false; else $status = true;
@@ -385,17 +388,17 @@ class IndexController extends pm_Controller_Action
 //                Common::getButtonStartStop($status, "id", ["Enabled", "Enable"], ["Disabled", "Disable"], $switchUrl) :
 //                Common::getIcon($status, "Enabled", "Disabled");
 
-            $cl = new PanelClient($domain->row['cl_id']);
-            $sysUser = $cl->sysUser;
+           // $cl = new PanelClient($domain->row['cl_id']);
+//            $sysUser = $cl->sysUser;
 
             $data[] = array(
                 'column-1' => $id,
                 'column-2' => url($editUrl, $domain->row['displayName']),
                 'column-3' => url($editUrl, $domain->row['cr_date']),
                 'column-4' => Common::getIcon($status, "Enabled", "Disabled"),
-                'column-5' => $domain->getAppPortStatus(),
+                'column-5' => $domain->getAppPortStatus(null, false),
                 'column-6' =>  $domain->getAppStatus(),
-                'column-7' => url($editUrl, $sysUser),
+                'column-7' => url($editUrl, $domain->sysUser),
                 'column-8' => Common::getSimpleButton("edit", "Manage", null, null, $editUrl),
             );
         }
@@ -420,7 +423,7 @@ class IndexController extends pm_Controller_Action
                 'noEscape' => true,
             ),
             'column-5' => array(
-                'title' => 'App Port',
+                'title' => 'TCP / TCPS',
                 'noEscape' => true,
             ),
             'column-6' => array(
@@ -512,6 +515,11 @@ class IndexController extends pm_Controller_Action
                             $r = $zipObj->extractTo($tmpdir);
                             $output = $r === true ? "" : "Could not unzip JXcore downloaded package: {$zip}.";
                             $zipObj->close();
+
+//                            $temporary = "/opt/psa/var/modules/jx";
+//                            if (file_exists($temporary)) {
+//                                copy($temporary,$unzippedJX);
+//                            }
                             chmod($unzippedJX, 0555);
                         } else {
                             $output = "Could not open JXcore downloaded package: {$zip}.";
@@ -549,11 +557,13 @@ class IndexController extends pm_Controller_Action
         $monitorWasRunning = Common::getURL(Common::$urlMonitor, $json);
 
         if ($req === 'start' && !$monitorWasRunning) {
-            $ret = Common::updateCronImmediate(false);
+            $ret = Common::updateCronImmediate("start");
             $cmd = null;
         } else
             if ($req === 'stop' && $monitorWasRunning) {
                 $cmd = Common::$jxpath . " monitor stop";
+//                $ret = Common::updateCronImmediate("stop");
+//                $cmd = null;
             } else {
                 return;
             }
@@ -563,6 +573,13 @@ class IndexController extends pm_Controller_Action
             chdir(dirname(Common::$jxpath));
             @exec($cmd, $out, $ret);
             chdir($cwd);
+
+
+            if ($req === 'stop' && $monitorWasRunning) {
+                // weird exit code on jx monitor stop (8)
+                $monitorIsRunning = Common::getURL(Common::$urlMonitor, $json);
+                if (!$monitorIsRunning) $ret = 0;
+            }
 
             if ($ret && $ret != 255) {
                 $this->_status->addMessage('error', "Could not execute command: $cmd. Error code = $ret. " . join(", ", $out));

@@ -12,9 +12,8 @@ var isRoot = whoami.toString().trim() === "root";
 var respawned = JSON.stringify(process.argv).indexOf("respawn_id") > -1;
 var exitting = false;
 
-
-var log = function(str, error) {
-    var str = "Spawner "  + (error ? "error" : "info" )  + ":\t" + str;
+var log = function (str, error) {
+    var str = "Spawner " + (error ? "error" : "info" ) + ":\t" + str;
     //fs.appendFileSync("/tmp/wiadro.txt", str + os.EOL);
 
     if (!logPath) return;
@@ -27,19 +26,17 @@ var log = function(str, error) {
 };
 
 
-
 var options = null;
 var pos = process.argv.indexOf("-opt");
 if (pos > -1 && process.argv[pos + 1]) {
     var decoded = process.argv[pos + 1];
-    console.log('decoded', decoded);
+//    console.log('decoded', decoded);
     options = JSON.parse(decoded);
-    console.log('options', options);
+//    console.log('options', options);
 } else {
     log("Options not found.", true);
     process.exit(7);
 }
-
 
 var logPath = options.log;
 if (!logPath) {
@@ -101,7 +98,7 @@ if (!isRoot || !respawned) {
         }
     }, function (delay) {
         //log("Subscribing is delayed by " + delay+ " ms.");
-        setTimeout(function() {
+        setTimeout(function () {
             process.exit(77);
         }, delay + 500);
     });
@@ -136,7 +133,7 @@ if (!isRoot || !respawned) {
             fs.writeFileSync(logPath, "");
             try {
                 fs.chownSync(logPath, uid, gid);
-            } catch(ex) {
+            } catch (ex) {
                 log("Cannot set ownership of this log file: " + ex, true);
             }
         }
@@ -176,13 +173,21 @@ if (!isRoot || !respawned) {
             log("Did not subscribed to the monitor: " + txt, true);
         } else {
             log("Subscribed successfully: " + txt);
+
+            // deleting config file
+            try {
+                fs.unlinkSync(configFile);
+            } catch (ex) {
+                log("Cannot delete config file: " + ex);
+            }
         }
     }, function (delay) {
-        log("Subscribing is delayed by " + delay+ " ms.");
-        setTimeout(function() {}, delay + 500);
+        log("Subscribing is delayed by " + delay + " ms.");
+        setTimeout(function () {
+        }, delay + 500);
     });
 
-    var exit = function(code) {
+    var exit = function (code) {
         exitting = true;
         try {
             if (child) {
@@ -194,7 +199,7 @@ if (!isRoot || !respawned) {
             if (!code) {
                 process.exit(77);
             }
-        } catch(ex) {
+        } catch (ex) {
         }
     };
 

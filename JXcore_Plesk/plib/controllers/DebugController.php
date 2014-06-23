@@ -78,7 +78,6 @@ class DebugController extends pm_Controller_Action
         // var contents
         Common::addHR($form);
         $this->addText($form, "pm_Context::getVarDir()", pm_Context::getVarDir());
-        $this->addText($form, "ls -al", shell_exec("ls -al " . pm_Context::getVarDir()));
         $this->addText($form, "Batch", file_get_contents(Common::$startupBatchPath));
 
 
@@ -87,6 +86,7 @@ class DebugController extends pm_Controller_Action
 
 
         $ids = Common::getDomainsIDs();
+        if (false)
         foreach ($ids as $id) {
             $log = [];
 //            $start = microtime(true);
@@ -109,6 +109,9 @@ class DebugController extends pm_Controller_Action
 
 
         }
+
+        Common::addHR($form);
+        $this->addText($form, "freeports domain 1", join("<br>", Common::getTakenAppPorts(1, true)));
 
 
         $client = pm_Session::getClient();

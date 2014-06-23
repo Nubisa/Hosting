@@ -30,6 +30,7 @@ class Common
     const sidDomainAppLogWebAccess = "jx_domain_app_log_web_access";
     const sidDomainJXcoreEnabled = "jx_domain_jxcore_enabled";
     const sidDomainJXcoreAppPort = "jx_domain_app_port";
+    const sidDomainJXcoreAppPortSSL = "jx_domain_app_port_ssl";
     const sidDomainJXcoreAppPath = "jx_domain_app_path";
     const sidDomainJXcoreAppMaxCPULimit = "jx_domain_app_max_cpu";
     const sidDomainJXcoreAppMaxMemLimit = "jx_domain_app_max_mem";
@@ -39,6 +40,7 @@ class Common
     const sidJXcoreMaximumPortNumber = "jx_app_max_port";
 
     const sidMonitorStartScheduledByCron = "jx_monitor_start_scheduled_by_cron";
+    const sidMonitorStartScheduledByCronAction = "jx_monitor_start_scheduled_by_cron_action";
 
     const iconON = '<img src="/theme/icons/16/plesk/on.png" style="vertical-align: middle; display: inline; margin-right: 7px;" height="16" width="16">';
     const iconOFF = '<img src="/theme/icons/16/plesk/off.png" style="vertical-align: middle; display: inline; margin-right: 7px;" height="16" width="16">';
@@ -67,6 +69,8 @@ class Common
         self::$controller = $controller;
         self::$status = $status;
 
+        self::clearPorts();
+//
         self::refreshValues();
     }
 
@@ -88,7 +92,11 @@ class Common
         if (!self::$domainsFetched) {
             // fetching domain list
             $dbAdapter = pm_Bootstrap::getDbAdapter();
-            $sql = "SELECT d.*, h.www_root FROM domains d left outer join hosting h on d.id = h.dom_id where htype = 'vrt_hst' order by id ASC";
+            $sql = "SELECT d.*, h.www_root, h.sys_user_id as sysId, u.login as sysLogin, u.home as sysHome
+                   FROM domains d
+                   left outer join hosting h on d.id = h.dom_id
+                   left outer join sys_users u on h.sys_user_id = u.id
+                   where htype = 'vrt_hst' order by id ASC";
 
             $statement = $dbAdapter->query($sql);
 
@@ -104,8 +112,8 @@ class Common
     public static function refreshValues()
     {
         self::$urlListDomains = pm_Context::getBaseUrl() . "index.php/index/listdomains";
-//        self::$urlMonitor = "http://localhost:17777/json?silent=true";
-        self::$urlMonitor = "http://localhost:17777/json";
+        self::$urlMonitor = "http://localhost:17777/json?silent=true";
+//        self::$urlMonitor = "http://localhost:17777/json";
         self::$urlMonitorLog = "http://localhost:17777/logs";
         self::$urlJXcoreConfig = pm_Context::getBaseUrl() . "index.php/index/jxcore";
         self::$urlDomainConfig = pm_Context::getBaseUrl() . "index.php/domain/config";
@@ -119,7 +127,7 @@ class Common
         self::$startupBatchPath = pm_Context::getVarDir() . "jxcore-for-plesk-startup.sh";
 
 //        $client = new PanelClient();
-//        $controller->view->userStatusBar = $client->statusBar;
+//        self::$controller->view->userStatusBar = $client->statusBar;
 
         $client = pm_Session::getClient();
         self::$isAdmin = $client->isAdmin();
@@ -162,7 +170,8 @@ class Common
             $cfg = '{
                        "monitor" :
                        {
-                           "log_path" : "' . $dir . 'jx_monitor_[WEEKOFYEAR]_[YEAR].log"
+                           "log_path" : "' . $dir . 'jx_monitor_[WEEKOFYEAR]_[YEAR].log",
+                           "users": [ "psaadm" ]
                        }
                      }';
             file_put_contents($dir . "jx.config", $cfg);
@@ -216,10 +225,12 @@ class Common
     }
 
 
-    public function clearPorts()
+    public static function clearPorts()
     {
-        for ($a = 10000; $a < 10010; $a++) {
-            pm_Settings::set($this->sidDomainJXcoreAppPort . $a, "");
+//            self::$status->addMessage("info", "Clearing the ports");
+        for ($a = 10000; $a < 10020; $a++) {
+            pm_Settings::set(self::sidDomainJXcoreAppPort . "$a", 5);
+            pm_Settings::set(self::sidDomainJXcoreAppPortSSL . "$a", 6);
         }
     }
 
@@ -228,30 +239,48 @@ class Common
      * @param $domainId - if this param provided, the result will not contain port of applications for this domain
      * @return array
      */
-    public static function getTakenAppPorts($domainId = null, $clientId = null)
+    public static function getTakenAppPorts($domainId = null, $clientId = null, $ssl = null)
     {
         $rows = self::$domains;
 
         $portsTaken = [];
-        foreach ($rows as $id=>$domain) {
-            if ($domainId && $id == $domainId) continue;
+        foreach ($rows as $id => $domain) {
+            $me = $domainId && $id == $domainId;
+
             if ($clientId && $domain->row['cl_id'] != $clientId) continue;
             // array of strings
-            $port = pm_Settings::get(self::sidDomainJXcoreAppPort . $domain->row['id']);
-            if ($port && ctype_digit($port))
-                $portsTaken[] = $port;
+
+//            if (($me && $ssl !== false) || !$me) {
+            $skip = $domainId && $id == $domainId && ($ssl === false || $ssl === null);
+            if (!$skip) {
+                $port = pm_Settings::get(Common::sidDomainJXcoreAppPort . $domain->row['id']);
+                if ($port && ctype_digit($port))
+                    $portsTaken[] = $port;
+            }
+            $skip = $domainId && $id == $domainId &&  ($ssl === true || $ssl === null);
+//            if (($me && $ssl !== true) || !$me) {
+            if (!$skip) {
+                $port = pm_Settings::get(Common::sidDomainJXcoreAppPortSSL . $domain->row['id']);
+                if ($port && ctype_digit($port))
+                    $portsTaken[] = $port;
+            }
         }
 
         return $portsTaken;
     }
 
 
-    public static function getFreePorts($domainId)
+    public static function getFreePorts($domainId, $ssl = null)
     {
-        $takenPorts = self::getTakenAppPorts($domainId);
+        $takenPorts = self::getTakenAppPorts($domainId, null, $ssl);
         return self::getFreePortsFromTaken($takenPorts);
     }
 
+    /**
+     * Returns 5 first free ports
+     * @param $takenPorts
+     * @return array
+     */
     public static function getFreePortsFromTaken($takenPorts)
     {
         $ret = [];
@@ -304,8 +333,19 @@ class Common
 
         if ($monitorEnabled) {
             $commands = [
-                "cd " . dirname(Common::$jxpath),
-                "./jx monitor start"
+                // enabling proxy
+//                'json=$(a2enmod proxy_http)',
+//                'if [[ $json == *"new config"* ]]; then',
+//                'echo "need restart $json"',
+//                'service apache2 restart',
+//                'else',
+//                'echo "no restart $json"',
+//                'fi',
+//                'which a2enmod > /tmp/xxx.txt',
+//                'a2enmod proxy_http >> /tmp/xxx.txt',
+                '',
+                'cd ' . dirname(Common::$jxpath),
+                './jx monitor start'
             ];
 
             foreach (self::$domains as $id=>$domain) {
@@ -328,7 +368,7 @@ class Common
                 }
 //                self::$status->addMessage("info", $out);
 
-                $opt = $domain->getSpawnerParams(array("user" => $client->sysUser, "log" => $domain->appLogPath, "file" => $path));
+                $opt = $domain->getSpawnerParams(array("user" => $domain->sysUser, "log" => $domain->appLogPath, "file" => $path));
 //                self::$status->addMessage("info", $opt);
 //                $cmd = Common::$jxpath . " {$spawner} -u {$client->sysUser} -log '" . $domain->appLogPath . "' -opt {$opt} $path";
                 $cmd = Common::$jxpath . " {$spawner} -opt {$opt}";
@@ -343,6 +383,7 @@ class Common
                 // stopping or launching application, if provided with the argument $domainId
                 if ($domainId && intval($domainId) === $id) {
 
+                    $sleep = 3;
                     $json = null;
                     $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
                     $appRunning = strpos($json, $path) !== false;
@@ -350,14 +391,18 @@ class Common
                     $msg = "";
                     if (!$enabled && $appRunning) {
                         $cmd = Common::$jxpath . " monitor kill {$spawner} 2>&1";
+//                        $cmd = $domain->getSpawnerExitCommand(true);
                         $msg = " Cannot stop the application: ";
+                        $sleep += 2; // wait little longer for monitor to respawn an app
                     } else if ($enabled && !$appRunning) {
                         if (!$monitorRunning) {
                             // no point to run an application now, if monitor is not running
                             $cmd = "";
                             $msg = "Cannot start the application: ";
                         } else {
-                            // leave $cmd intact
+                            // leave $cmd intact - it will start the application
+                            // but enable proxy if its not enabled
+                            self::enableHttpProxy();
                         }
                     } else {
                         $cmd = null;
@@ -369,7 +414,7 @@ class Common
                             self::$status->addMessage($ret ? "error" : "info", $msg . join("\n", $out) . ". Exit code: $ret");
                         }
                         // let the monitor respawn app as root
-                        sleep(3);
+                        sleep($sleep);
                     }
                 }
             }
@@ -421,7 +466,7 @@ class Common
      * Modifying crontab for immediate execution (next minute)
      * @return int - number of seconds until cron job should be started
      */
-    public static function updateCronImmediate($remove)
+    public static function updateCronImmediate($action = null)
     {
         $now = date("i-H-d-m-s");
         $parsed = explode('-', $now);
@@ -452,26 +497,34 @@ class Common
 
         // min hour day month
         $timing = "{$nextMinute} " . $hour . " " . intval($parsed[2]) . " " . intval($parsed[3]);
-        $cmd = $timing . " * " . Common::$startupBatchPath;
-        $contents = Common::saveBlockToText($contents, "JXcore-immediate", $remove ? "" : $cmd, null);
+        $cmd = "";
+        if ($action == 'start') {
+            $cmd = $timing . " * " . Common::$startupBatchPath;
+        } else if ($action == 'stop') {
+            $cmd = $timing . " * " . Common::$jxpath . " monitor stop";
+        }
+
+        $contents = Common::saveBlockToText($contents, "JXcore-immediate", $cmd, null);
 
         // a NewLine characted was needed on Nubisa's production server
         $contents = trim($contents) . "\n";
         file_put_contents($tmpfile, $contents);
         @exec("$binary set root $tmpfile 2>&1", $out, $ret);
         if ($ret) {
-            self::$status->addMessage("error", "Cannot set immediate crontab job (arg = {$remove}): " . join("\n", $out) . $cmd);
+            self::$status->addMessage("error", "Cannot set immediate crontab job (arg = {$action}): " . join("\n", $out) . $cmd);
             return;
         }
 
         @unlink($tmpfile);
 
         $timestamp = mktime($hour, $nextMinute, 0, $parsed[3], $parsed[2]);
-        pm_Settings::set(self::sidMonitorStartScheduledByCron, $remove ? null : $timestamp);
+        pm_Settings::set(self::sidMonitorStartScheduledByCron, $action == null ? null : $timestamp);
+        pm_Settings::set(self::sidMonitorStartScheduledByCronAction, $action);
     }
 
     public static function checkCronScheduleStatus($addMessage)
     {
+        $action = pm_Settings::get(self::sidMonitorStartScheduledByCronAction);
         $timestamp = pm_Settings::get(self::sidMonitorStartScheduledByCron);
         if (!$timestamp) return null;
 
@@ -485,21 +538,30 @@ class Common
                 $waitSeconds = $diff + 10;
                 $refresh = '<script type="text/javascript">var cnt = ' . $waitSeconds . '; var loop = function() { cnt--; document.getElementById("jx_refresh_count").innerHTML = cnt;  if (cnt<0) document.location.reload(); else setTimeout(loop, 1000); }; loop() ;</script>';
                 //self::$status->addMessage("info", "timestamp = $timestamp, now = $now, diff = $diff");
-                $str = "Monitor should be launched in approx {$diff} seconds. Page will refresh after <span id='jx_refresh_count' name='jx_refresh_count'>5</span> seconds." . $refresh;
+                $txt = "";
+                if ($action == 'start') $txt = "Monitor should be launched in approx {$diff} seconds.";
+                if ($action == 'stop') $txt = "Monitor should be stopped in approx {$diff} seconds.";
+
+                $str = "$txt Page will refresh after <span id='jx_refresh_count' name='jx_refresh_count'>5</span> seconds." . $refresh;
                 self::$status->addMessage('info', $str);
             }
         } else {
 
             $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
-            if ($monitorRunning)
-                self::updateCronImmediate(true);
-            else {
+            if ($monitorRunning && $action == 'start') {
+                self::updateCronImmediate();
+            } else if (!$monitorRunning && $action == 'stop') {
+                self::updateCronImmediate();
+            } else {
                 if ($diff < -15) {
-                    // error - monitor did not start after 15 secs
-                    self::updateCronImmediate(true);
-                    self::$status->addMessage("error", "Could not start the JXcore monitor with crontab.");
-                }
+                    $txt = null;
+                    if ($action == 'start') $txt = "Could not start the JXcore monitor with crontab";
+                    if ($action == 'stop') $txt = "Could not stop the JXcore monitor with crontab";
+                    if ($txt) self::$status->addMessage("error", $txt);
 
+                    // error - monitor did not start after 15 secs
+                    self::updateCronImmediate();
+                }
             }
         }
 
@@ -514,7 +576,7 @@ class Common
         $basename = ".htaccess";
         $file = $domain->rootFolder . $basename;
 
-        $relFile = str_replace($mgr->getFilePath(), "", $file);
+        $relFile = str_replace($mgr->getFilePath("."), "", $file);
 
         if ($domain->JXcoreSupportEnabled()) {
             $htaccess = [];
@@ -639,6 +701,41 @@ class Common
 
         return join("\n", $arr);
     }
+
+    public static function enableHttpProxy() {
+        //return;
+
+        $cmd1 = "/opt/psa/admin/bin/httpd_modules_ctl -s";
+//        $cmd2 = "/opt/psa/admin/bin/apache_control_adapter --restart";
+        $cmd2 = "/opt/psa/admin/bin/httpd_modules_ctl -e proxy_http";
+
+//        $before = shell_exec($cmd1);
+
+        $out = null;
+        $ret = null;
+        @exec($cmd1, $out, $ret);
+        if (!$ret) {
+            // checks proxy_http status
+            $isOn = strpos($out, "proxy_http on") !== false;
+            $isOff = strpos($out, "proxy_http on") !== false;
+
+            if ($isOff){
+                @exec($cmd2, $out, $ret);
+                if (!$ret) {
+                    $ret = shell_exec($cmd1);
+                    $isOn = strpos($out, "proxy_http on") !== false;
+                    if (!$isOn) {
+                        self::$status->addMessage("error", "The module proxy_http could not be enabled.");
+                    }
+                } else {
+                    self::$status->addMessage("error", "Cannot enable proxy_http.");
+                }
+            }
+        } else {
+            self::$status->addMessage("error", "Cannot fetch proxy_http status");
+        }
+    }
+
 }
 
 
@@ -648,6 +745,10 @@ class DomainInfo
     public $rootFolder = "";
     public $appLogPath = "";
     public $name = "";
+
+    public $sysUser = null;
+    public $sysUserId = null;
+    public $sysUserHomeDir = null;
 
     private $domain = null;
     private $fileManager = null;
@@ -664,6 +765,10 @@ class DomainInfo
         $domain->rootFolder = $row['www_root'] . "/";
         $domain->appLogPath = $domain->rootFolder . self::appLogBasename;
         $domain->row = $row;
+
+        $domain->sysUserId = $row['sysId'];
+        $domain->sysUser = $row['sysLogin'];
+        $domain->sysUserHomeDir = $row['sysHome'];
         return $domain;
     }
 
@@ -718,16 +823,22 @@ class DomainInfo
             if ($monitorRunning) {
                 $port = $this->getAppPort();
                 if ($port < Common::$minApplicationPort || $port > Common::$maxApplicationPort) {
-                    $port .= "<br><span style='color: red'>Port out of range.</span>";
+                    $port .= "<br><span style='color: orangered'>TCP port out of range.</span>";
                 }
-                return Common::getIcon($appRunning, "Running on port " . $port, "Not running");
+
+                $portSSL = $this->getAppPort(true);
+                if ($portSSL < Common::$minApplicationPort || $portSSL > Common::$maxApplicationPort) {
+                    $portSSL .= "<br><span style='color: orangered'>TCPS port out of range.</span>";
+                }
+
+                return Common::getIcon($appRunning, "Running on TCP: $port, TCPS: $portSSL", "Not running");
             } else {
                 $ret = Common::checkCronScheduleStatus(false);
                 $str = ($ret && $ret > 0) ? "<br>Monitor is starting in $ret secs." : "Monitor offline.";
                 return Common::getIcon(false, "", "Not running. $str");
             }
         } else {
-            return "<span style=\"color: red;\">No file:</span> " . $this->getAppPathOrDefault();
+            return "<span style=\"color: orangered;\">No file:</span> " . $this->getAppPathOrDefault();
         }
     }
 
@@ -736,37 +847,60 @@ class DomainInfo
         return pm_Settings::get(Common::sidDomainJXcoreEnabled . $this->id);
     }
 
-    public function getAppPort()
+    public function getAppPort($ssl = false)
     {
-        return pm_Settings::get(Common::sidDomainJXcoreAppPort . $this->id);
+        $sid = $ssl ? Common::sidDomainJXcoreAppPortSSL : Common::sidDomainJXcoreAppPort;
+        return pm_Settings::get( $sid . $this->id);
     }
 
-    public function getAppPortOrDefault($updateIfEmpty = false)
+    public function getAppPortOrDefault($updateIfEmpty = false, $ssl = false)
     {
-        $port = pm_Settings::get(Common::sidDomainJXcoreAppPort . $this->id);
+        $sid = $ssl ? Common::sidDomainJXcoreAppPortSSL : Common::sidDomainJXcoreAppPort;
+
+        $port = pm_Settings::get($sid . $this->id);
         if (!$port || trim($port) === '') {
-            $port = Common::getFreePorts($this->id)[0];
+            $port = Common::getFreePorts($this->id, $ssl)[0];
             if ($updateIfEmpty)
-                $this->setAppPort($port);
+                $this->setAppPort($port, $ssl);
         }
         return $port;
     }
 
-    public function setAppPort($port)
+    public function setAppPort($port, $ssl = false)
     {
-        pm_Settings::set(Common::sidDomainJXcoreAppPort . $this->id, $port);
+        $sid = $ssl ? Common::sidDomainJXcoreAppPortSSL : Common::sidDomainJXcoreAppPort;
+        pm_Settings::set($sid . $this->id, $port);
     }
 
-    public function getAppPortStatus()
+    private function getPortStatus($val)
     {
-        $port = $this->getAppPort();
-        if (!$port)
-            return "<span style='color: red'>Port is not defined.</span>";
+        if (!$val)
+            return "<span style='color: orangered'>not defined.</span>";
 
-        if ($port < Common::$minApplicationPort || $port > Common::$maxApplicationPort)
-            return "<br><span style='color: red'>Port out of range.</span>";
+        if ($val < Common::$minApplicationPort || $val > Common::$maxApplicationPort)
+            return "<br><span style='color: orangered'>out of range.</span>";
         else
-            return $port;
+            return $val;
+    }
+
+    public function getAppPortStatus($ssl = null, $addType = false)
+    {
+        $ret = "";
+        if ($ssl === null || $ssl === false) {
+            if ($addType) $ret .= "TCP: ";
+            $ret .= $this->getPortStatus($this->getAppPort(false));
+        }
+
+        if ($ssl === null) $ret .= " / ";
+
+        if ($ssl === null || $ssl === true) {
+            if ($addType) $ret .= "TCPS: ";
+            $ret .= $this->getPortStatus($this->getAppPort(true));
+        }
+
+        $ret = trim($ret);
+//        $ret = str_replace("\n", "<br>", $ret);
+        return $ret;
     }
 
     public function getAppPath($fullPath = false)
@@ -810,7 +944,7 @@ class DomainInfo
         $path = $this->getAppPathOrDefault(true);
         if (!file_exists($path)) $str .= "No file: " . $this->getAppPath() . ".";
 
-        return trim($str) != "" ? "<span style='color: red'>$str</span>" : true;
+        return trim($str) != "" ? "<span style='color: orangered'>$str</span>" : true;
     }
 
     /**
@@ -876,18 +1010,21 @@ class DomainInfo
         $arr = [];
 
         $params = array(
-            "port" => Common::sidDomainJXcoreAppPort,
+            "portTCP" => Common::sidDomainJXcoreAppPort,
+            "portTCPS" => Common::sidDomainJXcoreAppPortSSL,
             "cpu" => Common::sidDomainJXcoreAppMaxCPULimit,
-            "mem" => Common::sidDomainJXcoreAppMaxMemLimit,
+            "maxMemory" => Common::sidDomainJXcoreAppMaxMemLimit,
             "child" => Common::sidDomainJXcoreAppAllowSpawnChild);
 
+        // as non-strings
         foreach ($params as $key => $sid) {
             $val = pm_Settings::get($sid . $this->id);
             if (trim($val) != "") {
-                $arr[] = "\"{$key}\" : \"{$val}\"";
+                $arr[] = "\"{$key}\" : {$val}";
             }
         }
 
+        // as strings
         foreach ($additionalParams as $key => $val) {
             $arr[] = "\"{$key}\" : \"{$val}\"";
         }
@@ -905,9 +1042,10 @@ class DomainInfo
         $arr = [];
 
         $params = array(
-            "port" => Common::sidDomainJXcoreAppPort,
+            "portTCP" => Common::sidDomainJXcoreAppPort,
+            "portTCPS" => Common::sidDomainJXcoreAppPortSSL,
             "cpu" => Common::sidDomainJXcoreAppMaxCPULimit,
-            "mem" => Common::sidDomainJXcoreAppMaxMemLimit,
+            "maxMemory" => Common::sidDomainJXcoreAppMaxMemLimit,
             "child" => Common::sidDomainJXcoreAppAllowSpawnChild);
 
         foreach ($params as $key => $sid) {
@@ -923,10 +1061,22 @@ class DomainInfo
     }
 
 
+    /**
+     * This was a workaround for killing an app (jx monitor kill) with psaadm user
+     * (at the time, when he was not authorized for this operation - only root)
+     * @param $permanent
+     * @return string
+     */
+    public function getSpawnerExitCommand($permanent) {
+        $spawner = $this->getSpawnerPath($out);
+        $val = $permanent ? "norestart" : "restart";
+        return Common::$jxpath . " {$spawner} -opt '{ \"exit\" : \"{$val}\" }' 2>&1";
+    }
+
     public function clearLogFile()
     {
         if (file_exists($this->appLogPath)) {
-            $rel = str_replace($this->fileManager->getFilePath(), "", $this->appLogPath);
+            $rel = str_replace($this->fileManager->getFilePath("."), "", $this->appLogPath);
             $this->fileManager->filePutContents($rel, "");
             $newSize = filesize($this->appLogPath);
 
@@ -961,20 +1111,35 @@ class PanelClient
         $this->whoami = shell_exec("whoami");
 
         $dbAdapter = pm_Bootstrap::getDbAdapter();
+
+//        $sql = "SELECT
+//            sys.login as sysLogin, cli.login as cliLogin, cli.type as cliType
+//            FROM clients cli
+//            join smb_users smb on smb.login = cli.login
+//            join sys_users sys on sys.id = smb.id
+//            where cli.id = $clientId";
+
+
         $sql = "SELECT
-            sys.login as sysLogin, cli.login as cliLogin, cli.type as cliType
+            cli.login as cliLogin, cli.type as cliType
             FROM clients cli
-            join smb_users smb on smb.login = cli.login
-            join sys_users sys on sys.id = smb.id
             where cli.id = $clientId";
 
         $statement = $dbAdapter->query($sql);
 
         $row = $statement->fetch();
 
+
+
         $this->sysUser = $row["sysLogin"];
         $this->panelLogin = $row["cliLogin"];
         $this->type = $row["cliType"];
-        $this->statusBar = "Username: <b>{$this->panelLogin}</b>. Account type: <b>{$this->type}</b>. Whoami: <b>{$this->whoami}</b>. System user: <b>{$this->sysUser}</b><hr>";
+        $this->statusBar = "Client Id: {$clientId}, Username: <b>{$this->panelLogin}</b>. Account type: <b>{$this->type}</b>. Whoami: <b>{$this->whoami}</b>. System user: <b>{$this->sysUser}</b><hr>";
+
+        if (pm_Session::isImpersonated()) {
+            $client = pm_Session::getImpersonatedClientId();
+            $clientId = $client->getId();
+            $this->statusBar .= "Imp client. Id {$clientId}, login: {$client->getProperty('login')} <hr>";
+        }
     }
 }

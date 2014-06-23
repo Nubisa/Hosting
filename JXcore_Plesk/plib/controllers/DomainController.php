@@ -21,10 +21,10 @@ class DomainController extends pm_Controller_Action
                 'title' => 'JXcore application log ',
                 'action' => 'log',
             ),
-            array(
-                'title' => 'Third party apps',
-                'action' => 'third-party',
-            ),
+//            array(
+//                'title' => 'Third party apps',
+//                'action' => 'third-party',
+//            ),
         );
 
         require_once("common.php");
@@ -153,17 +153,36 @@ class DomainController extends pm_Controller_Action
 
         $validator = new MyValid_NumericBetween();
         $validator->domainId = $this->ID;
+        $validator->ssl = false;
+        $validator->otherValue = $this->getRequest()->getParam(Common::sidDomainJXcoreAppPortSSL);
 
 
         $form->addElement($canEdit && Common::$isAdmin ? 'text' : 'simpleText', Common::sidDomainJXcoreAppPort, array(
-            'label' => 'Application\'s port',
+            'label' => 'Application\'s TCP port',
             'value' => $this->domain->getAppPortOrDefault(),
             'required' => true,
             'validators' => array(
                 'Int',
                 $validator
             ),
-            'description' => 'Port on which JXcore application is allowed to run.',
+            'description' => 'TCP port on which JXcore application is allowed to run.',
+            'escape' => false
+        ));
+
+        $validator2 = new MyValid_NumericBetween();
+        $validator2->domainId = $this->ID;
+        $validator2->ssl = true;
+        $validator2->otherValue = $this->getRequest()->getParam(Common::sidDomainJXcoreAppPort);
+
+        $form->addElement($canEdit && Common::$isAdmin ? 'text' : 'simpleText', Common::sidDomainJXcoreAppPortSSL, array(
+            'label' => 'Application\'s TCPS port',
+            'value' => $this->domain->getAppPortOrDefault(false, true),
+            'required' => true,
+            'validators' => array(
+                'Int',
+                $validator2
+            ),
+            'description' => 'TCP Secure port on which JXcore application is allowed to run.',
             'escape' => false
         ));
 
@@ -174,7 +193,7 @@ class DomainController extends pm_Controller_Action
 //            'escape' => false
 //        ));
 
-//        Common::addHR($form);
+        Common::addHR($form);
 
 //        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxCPULimit . $this->ID);
 //        $form->addElement($canEdit ? 'text' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppMaxCPULimit : "cpu", array(
@@ -188,17 +207,17 @@ class DomainController extends pm_Controller_Action
 //            'escape' => false
 //        ));
 //
-//        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxMemLimit . $this->ID);
-//        $form->addElement($canEdit ? 'text' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppMaxMemLimit : "mem", array(
-//            'label' => 'Max MEM',
-//            'value' => $canEdit ? $val : ($val ? "$val kb" : "disabled"),
-//            'required' => false,
-//            'validators' => array(
-//                'Int', //array("Between", true, array( 'min' => 1, 'max' => 100))
-//            ),
-//            'description' => 'Maximum size of memory allocated by the the application (kilobytes).',
-//            'escape' => false
-//        ));
+        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxMemLimit . $this->ID);
+        $form->addElement($canEdit ? 'text' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppMaxMemLimit : "mem", array(
+            'label' => 'Maximum memory limit',
+            'value' => $canEdit ? $val : ($val ? "$val bytes" : "disabled"),
+            'required' => false,
+            'validators' => array(
+                'Int', //array("Between", true, array( 'min' => 1, 'max' => 100))
+            ),
+            'description' => 'Maximum size of memory, which can be allocated by the application (bytes).',
+            'escape' => false
+        ));
 
 //        $val = pm_Settings::get(Common::sidDomainJXcoreAppAllowSpawnChild . $this->ID);
 //        $form->addElement($canEdit ? 'checkbox' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppAllowSpawnChild : "child", array(
@@ -227,10 +246,13 @@ class DomainController extends pm_Controller_Action
                 pm_Settings::set(Common::sidDomainJXcoreEnabled . $this->ID, $actionValue == "start" ? 1 : 0);
             } else if ($actionRestartPressed) {
                 $cmd = Common::$jxpath . " monitor kill " . $this->domain->getSpawnerPath() . " 2>&1";
+//                $cmd = $this->domain->getSpawnerExitCommand();;
                 @exec($cmd, $out, $ret);
                 if ($ret && $ret != 77) {
                     $this->_status->addMessage($ret ? "error" : "info", "Cannot stop the application: " . join("\n", $out) . ". Exit code: $ret");
                 }
+                // wait a little for monitor to respawn an app
+//                sleep(2);
 //                else {
 //                    $this->_status->addMessage("info", "Application is stopped.");
 //                }
@@ -238,12 +260,14 @@ class DomainController extends pm_Controller_Action
             } else {
                 if ($canEdit) {
                     $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess,
-                        // Common::sidDomainJXcoreAppMaxCPULimit, Common::sidDomainJXcoreAppMaxMemLimit,
+                        // Common::sidDomainJXcoreAppMaxCPULimit,
+                        Common::sidDomainJXcoreAppMaxMemLimit,
                         //  Common::sidDomainJXcoreAppAllowSpawnChild
                     ];
 
                     if (Common::$isAdmin) {
                         $params[] = Common::sidDomainJXcoreAppPort;
+                        $params[] = Common::sidDomainJXcoreAppPortSSL;
                     }
 
                 } else {
@@ -252,7 +276,7 @@ class DomainController extends pm_Controller_Action
 
                 foreach ($params as $param) {
                     pm_Settings::set($param . $this->ID, $form->getValue($param));
-//                        $this->_status->addMessage("info", "$param = " . $form->getValue($param));
+//                    $this->_status->addMessage("info", "$param = " . $form->getValue($param));
                 }
                 $this->_status->addMessage('info', 'Data was successfully saved.');
 
@@ -292,7 +316,7 @@ class DomainController extends pm_Controller_Action
         ));
 
         $val = pm_Settings::get($sidLastLinesCount . $this->ID);
-        if (!$val) $val = 200;
+        if (!$val && $val !=0) $val = 200;
         $form->addElement('text', $sidLastLinesCount, array(
             'label' => 'Show last # lines',
             'value' => $val,
@@ -330,11 +354,13 @@ class DomainController extends pm_Controller_Action
 
         $this->readLog($val);
 
+        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
         $this->view->form = $form;
     }
 
     private function readLog($tail)
     {
+       // $this->_status->addMessage("info", "last lines " . $tail);
         if (file_exists($this->domain->appLogPath)) {
             if (!ctype_digit($tail) || $tail == 0) {
                 $contents = file_get_contents($this->domain->appLogPath);
@@ -407,6 +433,8 @@ class DomainController extends pm_Controller_Action
             }
             $this->_helper->json(array('redirect' => Common::$urlDomainAppLog));
         }
+
+        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
         $this->view->form = $form;
     }
 
@@ -418,6 +446,7 @@ class MyValid_NumericBetween extends Zend_Validate_Abstract
     const MSG_MINIMUM = 'msgMinimum';
     const MSG_MAXIMUM = 'msgMaximum';
     const MSG_BUSY = "msgBusy";
+    const MSG_DIFFERENT = "msgDifferent";
 
     public $minimum = 0;
     public $maximum = 0;
@@ -432,7 +461,8 @@ class MyValid_NumericBetween extends Zend_Validate_Abstract
     protected $_messageTemplates = array(
         self::MSG_MINIMUM => "'%value%' must be at least '%min%'",
         self::MSG_MAXIMUM => "'%value%' must be no more than '%max%'",
-        self::MSG_BUSY => "'%value%' is already taken. %free%'"
+        self::MSG_BUSY => "'%value%' is already taken. %free%'",
+        self::MSG_DIFFERENT => "TCP and TCPS port values cannot have the same values"
     );
 
     public function isValid($value)
@@ -453,11 +483,20 @@ class MyValid_NumericBetween extends Zend_Validate_Abstract
             return false;
         }
 
+        if ($value == $this->otherValue) {
+            $this->_error(self::MSG_DIFFERENT);
+            return false;
+        }
 
-        $takenPorts = Common::getTakenAppPorts($this->domainId);
+        $takenPorts = Common::getTakenAppPorts($this->domainId, $this->ssl);
 
         if (in_array($value, $takenPorts)) {
             $freePorts = Common::getFreePortsFromTaken($takenPorts);
+
+            if(($key = array_search($this->otherValue, $freePorts)) !== false) {
+                unset($freePorts[$key]);
+            }
+
             $this->free = "Try one of the following: " . join(", ", $freePorts);
             $this->_error(self::MSG_BUSY);
             return false;
