@@ -315,8 +315,16 @@ class IndexController extends pm_Controller_Action
                 } else {
 //                    $params = [Common::sidMonitorEnabled, Common::sidJXcoreMinimumPortNumber, Common::sidJXcoreMaximumPortNumber];
                     $params = [Common::sidJXcoreMinimumPortNumber, Common::sidJXcoreMaximumPortNumber];
+                    $portsChanged = false;
                     foreach ($params as $param) {
+                        if (pm_Settings::get($param) !== $form->getValue($param)) $portsChanged = true;
                         pm_Settings::set($param, $form->getValue($param));
+                    }
+
+                    if ($portsChanged) {
+                        $this->_status->addMessage("info", "Ports has changed");
+                        //todo: unfinished
+                        Common::reassignPorts();
                     }
 
                     Common::updateBatchAndCron(null);
@@ -344,24 +352,25 @@ class IndexController extends pm_Controller_Action
         if (file_exists($node_modules)) {
             $d = dir($node_modules);
             while (false !== ($entry = $d->read())) {
-                $installed_modules[] = $entry;
+                if (!in_array($entry, [ '.', '..']) && is_dir($node_modules . $entry)) {
+                    $installed_modules[] = Common::getIcon(true, $entry, "");
+                }
             }
             $d->close();
         }
 
-
         $form = new pm_Form_Simple();
 
         $form->addElement('simpleText', "installedModules", array(
-            'label' => 'InstalledModules',
+            'label' => 'Installed modules',
             'value' => count($installed_modules) ? join("<br>", $installed_modules) : "None",
             'escape' => false
         ));
 
-        $names = $this->getRequest()->getParam("names");
+        $nameToInstall = trim($this->getRequest()->getParam("names"));
         $form->addElement('text', "names", array(
             'label' => 'Install new module',
-            'value' => $names,
+            'value' => $nameToInstall,
             'validators' => array(
 
             ),
@@ -377,39 +386,18 @@ class IndexController extends pm_Controller_Action
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
 
-            $arr = explode(",", $names);
-            $str = "";
-            foreach($arr as $name) {
-                $name = trim($name);
-                $str .= "$name|";
+            if ($nameToInstall != "") {
+                Common::callService("install", $nameToInstall, "Module #arg# installed", "Cannot install #arg# module.");
+            } else {
+                $this->_status->addMessage('error', 'Nothing to install.');
             }
 
-//            $cmd =
-
-            $this->_status->addMessage('info', $str);
-
-//            $actionClearValue = $this->getRequest()->getParam($sidClearLog);
-//            $actionClearPressed = $actionClearValue === "clear";
-//
-//            $val = $form->getValue($sidLastLinesCount);
-//
-//            if ($actionClearPressed) {
-//                $ret = $this->domain->clearLogFile();
-//                if ($ret === false) {
-//                    $this->_status->addMessage('error', 'Could not clear the log file.');
-//                } else {
-//                    $this->_status->addMessage('info', 'Log cleared.');
-//                }
-//            } else {
-//                pm_Settings::set($sidLastLinesCount . $this->ID, $val);
-//            }
             $this->_helper->json(array('redirect' => Common::$urlJXcoreModules));
         }
 
         $this->view->form = $form;
         Common::check();
     }
-
 
     private function _getDomains()
     {

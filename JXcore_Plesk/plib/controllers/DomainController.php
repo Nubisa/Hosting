@@ -253,6 +253,7 @@ class DomainController extends pm_Controller_Action
                 if ($canEdit && Common::$isAdmin) {
                     $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess,
                         Common::sidDomainJXcoreAppMaxCPULimit,
+                        Common::sidDomainJXcoreAppMaxCPUInterval,
                         Common::sidDomainJXcoreAppMaxMemLimit,
                         Common::sidDomainJXcoreAppAllowCustomSocketPort,
                         Common::sidDomainJXcoreAppAllowSysExec,
@@ -337,11 +338,29 @@ class DomainController extends pm_Controller_Action
             'value' => $canEdit ? $val : ($val ? "$val %" : "disabled"),
             'required' => false,
             'validators' => array(
-                'Int' //, array("Between", true, array('min' => 1, 'max' => 100))
+                'Int',
+                //array("GreaterThan", true, array('min' => 0))),
+                //array("Between", true, array('min' => 1, 'max' => 100))
             ),
             'description' => 'Maximum CPU usage (percentage) allowed for the application. Value 0 disables the limit.',
             'escape' => false
         ));
+
+
+        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxCPUInterval . $this->ID);
+        $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxCPUInterval : ("field" . ($tmpID++)), array(
+            'label' => 'CPU check interval',
+            'value' => $canEdit ? $val : ($val ? "$val seconds" : "default"),
+            'required' => false,
+            'validators' => array(
+                'Int', //, array("Between", true, array('min' => 1, 'max' => 100))
+                array("GreaterThan", true, array('min' => 0))
+            ),
+            'description' => 'Interval (seconds) of Max CPU usage check. Default value is 2.',
+            'escape' => false
+        ));
+
+
 
         $val = pm_Settings::get(Common::sidDomainJXcoreAppAllowCustomSocketPort . $this->ID);
         $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowCustomSocketPort : ("field" . ($tmpID++)), array(

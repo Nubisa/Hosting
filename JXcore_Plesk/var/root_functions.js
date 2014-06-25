@@ -41,4 +41,24 @@ exports.watch = function (appFileName, appLogDir, cb) {
 };
 
 
-
+/**
+ * Reads jx.config file located at jx folder.
+ * @returns {*} Returns json object or null
+ */
+exports.readJXconfig = function() {
+    var dir = path.dirname(process.execPath);
+    var configFile = path.join(dir, "/", "jx.config");
+//        log("main cfg file: " + configFile);
+    if (!fs.existsSync(configFile)) {
+        return null;
+    } else {
+        try {
+            var str = fs.readFileSync(configFile);
+            var json = JSON.parse(str);
+            return json;
+        } catch(ex) {
+//            log("Cannot read or parse jx.config: " + ex, true);
+            return null;
+        }
+    }
+};

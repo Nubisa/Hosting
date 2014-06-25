@@ -116,27 +116,6 @@ if (!isRoot || !respawned) {
         }
     };
 
-    /**
-     * Reads jx.config file located at jx folder
-     * @returns {*}
-     */
-    var readJXconfig = function() {
-        var dir = path.dirname(process.execPath);
-        var configFile = path.join(dir, "/", "jx.config");
-//        log("main cfg file: " + configFile);
-        if (!fs.existsSync(configFile)) {
-            return null;
-        } else {
-            try {
-                var str = fs.readFileSync(configFile);
-                var json = JSON.parse(str);
-                return json;
-            } catch(ex) {
-                log("Cannot read or parse jx.config: " + ex, true);
-            }
-        }
-    };
-
     var file = options.file;
 
     checkAccess(file);
@@ -154,7 +133,7 @@ if (!isRoot || !respawned) {
 
         try {
             fs.writeFileSync(confFile, conf);
-            var ret = jxcore.utils.cmdSync("/etc/init.d/nginx reload");
+            var ret = jxcore.utils.cmdSync("chown psaadm:nginx " + confFile + "; /etc/init.d/nginx reload");
             if (ret.exitCode) {
                 log("Cannot reload nginx config: " + ret.out);
             }
@@ -211,7 +190,7 @@ if (!isRoot || !respawned) {
     // default path for app config
     var configFile = file + ".jxcore.config";
     var configFileIsDefault = true;
-    var jxconfig = readJXconfig();
+    var jxconfig = root_functions.readJXconfig();
 //    log("config read: " + JSON.stringify(jxconfig));
     if (jxconfig && jxconfig.globalApplicationConfigPath) {
         var base = file.replace(/[\/]/g, "_").replace(/[\\]/g, "_").replace(/:/g, "_") + ".jxcore.config";
