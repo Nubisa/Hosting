@@ -8,6 +8,7 @@ class Common
     public static $urlMonitor = "";
     public static $urlMonitorLog = "";
     public static $urlJXcoreConfig = "";
+    public static $urlJXcoreModules = "";
     public static $urlDomainConfig = "";
     public static $urlDomainAppLog = "";
 
@@ -15,6 +16,9 @@ class Common
 
     public static $jxv = null;
     public static $jxpath = null;
+
+    public static $dirNativeModules = null;
+    public static $dirAppsConfigs = null;
 
     public static $startupBatchPath = null;
 
@@ -32,9 +36,12 @@ class Common
     const sidDomainJXcoreAppPort = "jx_domain_app_port";
     const sidDomainJXcoreAppPortSSL = "jx_domain_app_port_ssl";
     const sidDomainJXcoreAppPath = "jx_domain_app_path";
+
     const sidDomainJXcoreAppMaxCPULimit = "jx_domain_app_max_cpu";
     const sidDomainJXcoreAppMaxMemLimit = "jx_domain_app_max_mem";
-    const sidDomainJXcoreAppAllowSpawnChild = "jx_domain_app_child";
+    const sidDomainJXcoreAppAllowCustomSocketPort = "jx_domain_app_allowCustomSocketPort";
+    const sidDomainJXcoreAppAllowSysExec = "jx_domain_app_allowSysExec";
+    const sidDomainJXcoreAppAllowLocalNativeModules = "jx_domain_app_allowLocalNativeModules";
 
     const sidJXcoreMinimumPortNumber = "jx_app_min_port";
     const sidJXcoreMaximumPortNumber = "jx_app_max_port";
@@ -70,7 +77,6 @@ class Common
         self::$status = $status;
 
         self::clearPorts();
-//
         self::refreshValues();
     }
 
@@ -111,20 +117,24 @@ class Common
 
     public static function refreshValues()
     {
-        self::$urlListDomains = pm_Context::getBaseUrl() . "index.php/index/listdomains";
+        $baseUrl = pm_Context::getBaseUrl();
+        $varDir = pm_Context::getVarDir();
+
+        self::$urlListDomains = $baseUrl . "index.php/index/listdomains";
         self::$urlMonitor = "http://localhost:17777/json?silent=true";
 //        self::$urlMonitor = "http://localhost:17777/json";
         self::$urlMonitorLog = "http://localhost:17777/logs";
-        self::$urlJXcoreConfig = pm_Context::getBaseUrl() . "index.php/index/jxcore";
-        self::$urlDomainConfig = pm_Context::getBaseUrl() . "index.php/domain/config";
-        self::$urlDomainAppLog = pm_Context::getBaseUrl() . "index.php/domain/log";
+        self::$urlJXcoreConfig = $baseUrl . "index.php/index/jxcore";
+        self::$urlJXcoreModules = $baseUrl . "index.php/index/modules";
+        self::$urlDomainConfig = $baseUrl . "index.php/domain/config";
+        self::$urlDomainAppLog = $baseUrl . "index.php/domain/log";
 
         self::$firstRun = !pm_Settings::get(self::sidFirstRun); // if empty, that it is first run
 
         self::$jxv = pm_Settings::get(self::sidJXversion);
         self::$jxpath = pm_Settings::get(self::sidJXpath);
 
-        self::$startupBatchPath = pm_Context::getVarDir() . "jxcore-for-plesk-startup.sh";
+        self::$startupBatchPath = $varDir . "jxcore-for-plesk-startup.sh";
 
 //        $client = new PanelClient();
 //        self::$controller->view->userStatusBar = $client->statusBar;
@@ -138,6 +148,9 @@ class Common
 
         $v = pm_Settings::get(self::sidJXcoreMaximumPortNumber);
         self::$maxApplicationPort = $v ? $v : self::maxApplicationPort_default;
+
+        self::$dirNativeModules = $varDir . "native_modules/";
+        self::$dirAppsConfigs = $varDir . "app_configs/";
     }
 
     public static function addHR(&$form)
@@ -163,6 +176,17 @@ class Common
 
     public static function setJXdata($version, $path)
     {
+        // globalModulePath: string
+        // globalApplicationConfigPath
+
+        // accessible by admin:
+
+        // maxMemory: long kB
+        // maxCPU: int
+        // allowCustomSocketPort: bool
+        // allowSysExec: bool
+        // allowLocalNativeModules: bool
+
 
         if (file_exists($path)) {
             $dir = dirname($path) . "/";
@@ -172,8 +196,20 @@ class Common
                        {
                            "log_path" : "' . $dir . 'jx_monitor_[WEEKOFYEAR]_[YEAR].log",
                            "users": [ "psaadm" ]
-                       }
+                       },
+                       "globalModulePath" : "' . self::$dirNativeModules . '",
+                       "globalApplicationConfigPath" : "' . self::$dirAppsConfigs . '"
                      }';
+
+
+            /*
+            "maxMemory" : null,
+                       "maxCPU" : 100,
+                       "allowCustomSocketPort" : true,
+                       "allowSysExec" : true,
+                       "allowLocalNativeModules" : true,
+             */
+
             file_put_contents($dir . "jx.config", $cfg);
         }
 
@@ -182,6 +218,21 @@ class Common
 
         self::$jxv = null;
         self::$jxpath = null;
+
+        // chmod for directories : rwx for psaadm, rx for the rest - processes spawned as users need to read this
+        $mode = 0755;
+        if(!file_exists(self::$dirNativeModules)) {
+            mkdir(self::$dirNativeModules, $mode);  // rw for psaadm, r for the rest
+        } else {
+            chmod(self::$dirNativeModules, $mode);
+        }
+
+        if(!file_exists(self::$dirAppsConfigs)) {
+            mkdir(self::$dirAppsConfigs, $mode);
+        } else {
+            chmod(self::$dirAppsConfigs, $mode);
+        }
+
 
         self::refreshValues();
     }
@@ -343,6 +394,17 @@ class Common
 //                'fi',
 //                'which a2enmod > /tmp/xxx.txt',
 //                'a2enmod proxy_http >> /tmp/xxx.txt',
+
+
+                'if [ -d /etc/nginx/conf.d ] && [ ! -e /etc/nginx/conf.d/jxcore.conf ]; then',
+                'mkdir /etc/nginx/jxcore.conf.d',
+                'chown psaadm:nginx /etc/nginx/jxcore.conf.d',
+                #'chmod 755 /etc/nginx/jxcore.conf.d',
+
+                'echo "include /etc/nginx/jxcore.conf.d/*.conf;" > "/etc/nginx/conf.d/jxcore.conf"',
+                'chown psaadm:nginx /etc/nginx/conf.d/jxcore.conf',
+                'chmod 640 /etc/nginx/conf.d/jxcore.conf',
+                'fi',
                 '',
                 'cd ' . dirname(Common::$jxpath),
                 './jx monitor start'
@@ -362,13 +424,14 @@ class Common
                     self::$status->addMessage("error", $out);
                     continue;
                 }
-                if ($domain->writeSpawnerOptions($out, $spawner) === false) {
-                    self::$status->addMessage("error", $out);
-                    continue;
-                }
+//                if ($domain->writeSpawnerOptions($out, $spawner) === false) {
+//                    self::$status->addMessage("error", $out);
+//                    continue;
+//                }
 //                self::$status->addMessage("info", $out);
 
-                $opt = $domain->getSpawnerParams(array("user" => $domain->sysUser, "log" => $domain->appLogPath, "file" => $path));
+                $opt = $domain->getSpawnerParams(array("user" => $domain->sysUser, "log" => $domain->appLogPath, "file" => $path,
+                                "domain" => $domain->name, "tcp" => $domain->getAppPort(), "tcps" => $domain->getAppPort(true), "logWebAccess" => $domain->getAppLogWebAccess() ));
 //                self::$status->addMessage("info", $opt);
 //                $cmd = Common::$jxpath . " {$spawner} -u {$client->sysUser} -log '" . $domain->appLogPath . "' -opt {$opt} $path";
                 $cmd = Common::$jxpath . " {$spawner} -opt {$opt}";
@@ -583,15 +646,23 @@ class Common
             $htaccess[] = 'RewriteEngine On';
 
             if ($domain->getAppLogWebAccess()) {
-                $htaccess[] = 'RewriteCond %{REQUEST_URI} !/' . DomainInfo::appLogBasename;
+                $htaccess[] = 'RewriteCond %{REQUEST_URI} !/' . $domain->appLogDir;// DomainInfo::appLogBasename;
             }
+
+//            $tcp = $domain->getAppPort();
+//            $tcps = $domain->getAppPort(true);
+//            $htaccess[] = 'RewriteCond %{SERVER_PORT} 80';
+//            $htaccess[] = 'RewriteRule ^(.*)$ http://0.0.0.0:' . $tcp . '/$1 [P]';
+//            $htaccess[] = 'RewriteRule ^(.*)$ https://0.0.0.0:' . $tcps . '/$1 [P]';
+//            $htaccess[] = 'RewriteRule ^(.*)$ ws://0.0.0.0:' . $tcp . '/$1 [P]';
+//            $htaccess[] = 'RewriteRule ^(.*)$ wss://0.0.0.0:' . $tcps . '/$1 [P]';
 
             $htaccess[] = 'RewriteCond %{SERVER_PORT} 80';
             $htaccess[] = 'RewriteRule ^(.*)$ http://0.0.0.0:' . $domain->getAppPort() . '/$1 [P]';
         } else {
             $htaccess = [];
         }
-
+//var_dump($domain->JXcoreSupportEnabled(), $htaccess);
         $txt = "";
 
         if ($mgr->fileExists($relFile)) $txt = $mgr->fileGetContents($relFile);
@@ -736,6 +807,16 @@ class Common
         }
     }
 
+
+    public static function saveJXconfig() {
+        $params = array(
+            "portTCP" => Common::sidDomainJXcoreAppPort,
+            "portTCPS" => Common::sidDomainJXcoreAppPortSSL,
+            "maxCPU" => Common::sidDomainJXcoreAppMaxCPULimit,
+            "maxMemory" => Common::sidDomainJXcoreAppMaxMemLimit);
+//            "child" => Common::sidDomainJXcoreAppAllowSpawnChild);
+    }
+
 }
 
 
@@ -744,6 +825,7 @@ class DomainInfo
     public $id = 0;
     public $rootFolder = "";
     public $appLogPath = "";
+    public $appLogDir = "";
     public $name = "";
 
     public $sysUser = null;
@@ -753,7 +835,7 @@ class DomainInfo
     private $domain = null;
     private $fileManager = null;
 
-    const appLogBasename = "JX_log.html";
+    const appLogBasename = "index.html";
     const appPath_default = "index.js";
 
     public $row = null;
@@ -763,7 +845,8 @@ class DomainInfo
     public static function getFromRow($row) {
         $domain = new DomainInfo($row['id']);
         $domain->rootFolder = $row['www_root'] . "/";
-        $domain->appLogPath = $domain->rootFolder . self::appLogBasename;
+        $domain->appLogDir = $domain->rootFolder . "jxcore_logs/";
+        $domain->appLogPath = $domain->appLogDir . self::appLogBasename;
         $domain->row = $row;
 
         $domain->sysUserId = $row['sysId'];
@@ -969,36 +1052,36 @@ class DomainInfo
     }
 
 
-    public function writeSpawnerOptions(&$out, $spawnerPath)
-    {
-        return true;
-        $json = $this->getSpawnerOptions();
-
-        $path = $this->getAppPath(true);
-        $configFile = $path . ".config.template";
-        $out = $json;
-        if (trim($json)==="{}") {
-            if (file_exists($configFile)) {
-                unlink($configFile);
-            }
-            return !file_exists($configFile);
-        } else {
-
-            if (file_put_contents($configFile, $json) === false){
-                $out = "Cannot save spawner options.";
-                return false;
-            }
-//            var_dump($configFile);
-            // only for psadm (and root)
-            if (chmod($configFile, 0600) === false) {
-                $out = "Cannot set spawner's option file permission.";
-                unlink($configFile);
-                return false;
-            }
-            $out = "$configFile, exists ? " . file_exists($configFile);
-            return file_exists($configFile);
-        }
-    }
+//    public function writeSpawnerOptions(&$out, $spawnerPath)
+//    {
+//        return true;
+//        $json = $this->getSpawnerOptions();
+//
+//        $path = $this->getAppPath(true);
+//        $configFile = $path . ".config.template";
+//        $out = $json;
+//        if (trim($json)==="{}") {
+//            if (file_exists($configFile)) {
+//                unlink($configFile);
+//            }
+//            return !file_exists($configFile);
+//        } else {
+//
+//            if (file_put_contents($configFile, $json) === false){
+//                $out = "Cannot save spawner options.";
+//                return false;
+//            }
+////            var_dump($configFile);
+//            // only for psadm (and root)
+//            if (chmod($configFile, 0600) === false) {
+//                $out = "Cannot set spawner's option file permission.";
+//                unlink($configFile);
+//                return false;
+//            }
+//            $out = "$configFile, exists ? " . file_exists($configFile);
+//            return file_exists($configFile);
+//        }
+//    }
 
     /**
      * Returns parameters for spawner command line (log, user, appFile)
@@ -1012,9 +1095,11 @@ class DomainInfo
         $params = array(
             "portTCP" => Common::sidDomainJXcoreAppPort,
             "portTCPS" => Common::sidDomainJXcoreAppPortSSL,
-            "cpu" => Common::sidDomainJXcoreAppMaxCPULimit,
+            "maxCPU" => Common::sidDomainJXcoreAppMaxCPULimit,
             "maxMemory" => Common::sidDomainJXcoreAppMaxMemLimit,
-            "child" => Common::sidDomainJXcoreAppAllowSpawnChild);
+            "allowCustomSocketPort" => Common::sidDomainJXcoreAppAllowCustomSocketPort,
+            "allowSysExec" => Common::sidDomainJXcoreAppAllowSysExec,
+            "allowLocalNativeModules" => Common::sidDomainJXcoreAppAllowLocalNativeModules);
 
         // as non-strings
         foreach ($params as $key => $sid) {
@@ -1037,28 +1122,28 @@ class DomainInfo
      * Returns restriction options for application of this domain
      * @return string
      */
-    private function getSpawnerOptions()
-    {
-        $arr = [];
-
-        $params = array(
-            "portTCP" => Common::sidDomainJXcoreAppPort,
-            "portTCPS" => Common::sidDomainJXcoreAppPortSSL,
-            "cpu" => Common::sidDomainJXcoreAppMaxCPULimit,
-            "maxMemory" => Common::sidDomainJXcoreAppMaxMemLimit,
-            "child" => Common::sidDomainJXcoreAppAllowSpawnChild);
-
-        foreach ($params as $key => $sid) {
-            $val = pm_Settings::get($sid . $this->id);
-            if (trim($val) != "") {
-                $arr[] = "\t\"{$key}\" : \"{$val}\"";
-            }
-        }
-
-        $json = "{\n" . join(",\n", $arr) . "\n}";
-//        $base64 = base64_encode($json);
-        return $json;
-    }
+//    private function getSpawnerOptions($domainId)
+//    {
+//        $arr = [];
+//
+//        $params = array(
+//            "portTCP" => Common::sidDomainJXcoreAppPort,
+//            "portTCPS" => Common::sidDomainJXcoreAppPortSSL,
+//            "maxCPU" => Common::sidDomainJXcoreAppMaxCPULimit,
+//            "maxMemory" => Common::sidDomainJXcoreAppMaxMemLimit,
+//            "child" => Common::sidDomainJXcoreAppAllowSpawnChild);
+//
+//        foreach ($params as $key => $sid) {
+//            $val = pm_Settings::get($sid . $this->id);
+//            if (trim($val) != "") {
+//                $arr[] = "\t\"{$key}\" : \"{$val}\"";
+//            }
+//        }
+//
+//        $json = "{\n" . join(",\n", $arr) . "\n}";
+////        $base64 = base64_encode($json);
+//        return $json;
+//    }
 
 
     /**
@@ -1076,6 +1161,8 @@ class DomainInfo
     public function clearLogFile()
     {
         if (file_exists($this->appLogPath)) {
+//            $fh = fopen($this->appLogPath, 'w' );
+//            fclose($fh);
             $rel = str_replace($this->fileManager->getFilePath("."), "", $this->appLogPath);
             $this->fileManager->filePutContents($rel, "");
             $newSize = filesize($this->appLogPath);
@@ -1136,10 +1223,10 @@ class PanelClient
         $this->type = $row["cliType"];
         $this->statusBar = "Client Id: {$clientId}, Username: <b>{$this->panelLogin}</b>. Account type: <b>{$this->type}</b>. Whoami: <b>{$this->whoami}</b>. System user: <b>{$this->sysUser}</b><hr>";
 
-        if (pm_Session::isImpersonated()) {
-            $client = pm_Session::getImpersonatedClientId();
-            $clientId = $client->getId();
-            $this->statusBar .= "Imp client. Id {$clientId}, login: {$client->getProperty('login')} <hr>";
-        }
+//        if (pm_Session::isImpersonated()) {
+//            $client = pm_Session::getImpersonatedClientId();
+//            $clientId = $client->getId();
+//            $this->statusBar .= "Imp client. Id {$clientId}, login: {$client->getProperty('login')} <hr>";
+//        }
     }
 }

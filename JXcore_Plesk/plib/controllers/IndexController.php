@@ -24,6 +24,10 @@ class IndexController extends pm_Controller_Action
                 array(
                     'title' => 'Domains',
                     'action' => 'listdomains',
+                ),
+                array(
+                    'title' => 'NPM Modules',
+                    'action' => 'modules',
                 )
             );
 
@@ -329,6 +333,84 @@ class IndexController extends pm_Controller_Action
     }
 
 
+
+    public function modulesAction()
+    {
+        if ($this->redirect(true)) return;
+
+        $node_modules = Common::$dirNativeModules . "node_modules/";
+
+        $installed_modules = [];
+        if (file_exists($node_modules)) {
+            $d = dir($node_modules);
+            while (false !== ($entry = $d->read())) {
+                $installed_modules[] = $entry;
+            }
+            $d->close();
+        }
+
+
+        $form = new pm_Form_Simple();
+
+        $form->addElement('simpleText', "installedModules", array(
+            'label' => 'InstalledModules',
+            'value' => count($installed_modules) ? join("<br>", $installed_modules) : "None",
+            'escape' => false
+        ));
+
+        $names = $this->getRequest()->getParam("names");
+        $form->addElement('text', "names", array(
+            'label' => 'Install new module',
+            'value' => $names,
+            'validators' => array(
+
+            ),
+            //'description' => 'Name, or names (comma separated) of NPM modules to install.',
+            'description' => 'Name of NPM module to install.',
+            'escape' => false
+        ));
+
+        $form->addControlButtons(array(
+            'cancelLink' => null,
+            'hideLegend' => true
+        ));
+
+        if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
+
+            $arr = explode(",", $names);
+            $str = "";
+            foreach($arr as $name) {
+                $name = trim($name);
+                $str .= "$name|";
+            }
+
+//            $cmd =
+
+            $this->_status->addMessage('info', $str);
+
+//            $actionClearValue = $this->getRequest()->getParam($sidClearLog);
+//            $actionClearPressed = $actionClearValue === "clear";
+//
+//            $val = $form->getValue($sidLastLinesCount);
+//
+//            if ($actionClearPressed) {
+//                $ret = $this->domain->clearLogFile();
+//                if ($ret === false) {
+//                    $this->_status->addMessage('error', 'Could not clear the log file.');
+//                } else {
+//                    $this->_status->addMessage('info', 'Log cleared.');
+//                }
+//            } else {
+//                pm_Settings::set($sidLastLinesCount . $this->ID, $val);
+//            }
+            $this->_helper->json(array('redirect' => Common::$urlJXcoreModules));
+        }
+
+        $this->view->form = $form;
+        Common::check();
+    }
+
+
     private function _getDomains()
     {
         if (!Common::$jxv) {
@@ -506,8 +588,8 @@ class IndexController extends pm_Controller_Action
                         $output = 'Cannot save downloaded file {$file} into {$zip}.';
                         return false;
                     } else {
-                        //exec("unzip $zip -d " . sys_get_temp_dir() . "/");
-                        unlink($unzippedJX);
+                        exec("rm -rf $unzippedDir");
+                        //unlink($unzippedJX);
 
                         $zipObj = new ZipArchive();
                         $res = $zipObj->open($zip);
@@ -516,11 +598,12 @@ class IndexController extends pm_Controller_Action
                             $output = $r === true ? "" : "Could not unzip JXcore downloaded package: {$zip}.";
                             $zipObj->close();
 
-//                            $temporary = "/opt/psa/var/modules/jx";
-//                            if (file_exists($temporary)) {
-//                                copy($temporary,$unzippedJX);
-//                            }
+                            $temporary = "/opt/psa/var/modules/jx";
+                            if (file_exists($temporary)) {
+                                copy($temporary,$unzippedJX);
+                            }
                             chmod($unzippedJX, 0555);
+                            @unlink($zip);
                         } else {
                             $output = "Could not open JXcore downloaded package: {$zip}.";
                             return false;

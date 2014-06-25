@@ -14,7 +14,6 @@ var exitting = false;
 
 var log = function (str, error) {
     var str = "Spawner " + (error ? "error" : "info" ) + ":\t" + str;
-    //fs.appendFileSync("/tmp/wiadro.txt", str + os.EOL);
 
     if (!logPath) return;
 
@@ -30,9 +29,7 @@ var options = null;
 var pos = process.argv.indexOf("-opt");
 if (pos > -1 && process.argv[pos + 1]) {
     var decoded = process.argv[pos + 1];
-//    console.log('decoded', decoded);
     options = JSON.parse(decoded);
-//    console.log('options', options);
 } else {
     log("Options not found.", true);
     process.exit(7);
@@ -43,6 +40,7 @@ if (!logPath) {
     log("Unknown log path.", true);
     process.exit(7);
 }
+var logPathDir = path.dirname(logPath);
 
 // searching for -u arg and converting it into int uid
 var uid = null;
@@ -105,6 +103,8 @@ if (!isRoot || !respawned) {
 
 } else {
 
+    var root_functions = require("./root_functions.js");
+
     var checkAccess = function (path) {
         var str = 'sudo -u "' + user + '" -- test -r "' + path + '" && echo "OK"';
         var ret = jxcore.utils.cmdSync(str);
@@ -116,10 +116,55 @@ if (!isRoot || !respawned) {
         }
     };
 
+    /**
+     * Reads jx.config file located at jx folder
+     * @returns {*}
+     */
+    var readJXconfig = function() {
+        var dir = path.dirname(process.execPath);
+        var configFile = path.join(dir, "/", "jx.config");
+//        log("main cfg file: " + configFile);
+        if (!fs.existsSync(configFile)) {
+            return null;
+        } else {
+            try {
+                var str = fs.readFileSync(configFile);
+                var json = JSON.parse(str);
+                return json;
+            } catch(ex) {
+                log("Cannot read or parse jx.config: " + ex, true);
+            }
+        }
+    };
+
     var file = options.file;
 
     checkAccess(file);
     checkAccess(path.dirname(file));
+
+    // ########  saving nginx conf
+    var confDir = "/etc/nginx/jxcore.conf.d/";
+    var confFile = confDir + options.domain + ".conf";
+
+    if (fs.existsSync(confDir)) {
+        var nginx = require("./nginxconf.js");
+        nginx.resetInterfaces();
+        var logWebAccess = options.logWebAccess == 1 || options.logWebAccess == "true";
+        var conf = nginx.createConfig(options.domain, [ options.tcp, options.tcps], logWebAccess ? path.dirname(logPath) : null);
+
+        try {
+            fs.writeFileSync(confFile, conf);
+            var ret = jxcore.utils.cmdSync("/etc/init.d/nginx reload");
+            if (ret.exitCode) {
+                log("Cannot reload nginx config: " + ret.out);
+            }
+//            log("return from nginx reload: " + JSON.stringify(ret));
+        } catch(ex) {
+            log("Cannot save nginx conf file: " + ex);
+        }
+    }
+    //
+
 
     // this can be done only by privileged user.
     // node throws exception otherwise
@@ -129,6 +174,15 @@ if (!isRoot || !respawned) {
     var err = 'ignore';
 
     if (logPath) {
+        if (!fs.existsSync(logPathDir)) {
+            fs.mkdirSync(logPathDir);
+            try {
+                fs.chownSync(logPathDir, uid, gid);
+            } catch (ex) {
+                log("Cannot set ownership of this log's directory: " + ex, true);
+            }
+        }
+
         if (!fs.existsSync(logPath)) {
             fs.writeFileSync(logPath, "");
             try {
@@ -149,11 +203,28 @@ if (!isRoot || !respawned) {
     delete options.log;
     delete options.user;
     delete options.file;
+    delete options.domain;
+    delete options.tcp;
+    delete options.tcps;
+    delete options.logWebAccess;
 
+    // default path for app config
     var configFile = file + ".jxcore.config";
+    var configFileIsDefault = true;
+    var jxconfig = readJXconfig();
+//    log("config read: " + JSON.stringify(jxconfig));
+    if (jxconfig && jxconfig.globalApplicationConfigPath) {
+        var base = file.replace(/[\/]/g, "_").replace(/[\\]/g, "_").replace(/:/g, "_") + ".jxcore.config";
+        // assuming, that folder exists (it's created by php)
+        if (fs.existsSync(jxconfig.globalApplicationConfigPath)) {
+            configFile = path.join(jxconfig.globalApplicationConfigPath, "/", base);
+            configFileIsDefault = false;
+        }
+    }
+//    log("app cfg file: " + configFile);
     fs.writeFileSync(configFile, JSON.stringify(options));
 
-    var child = spawn(process.execPath, [file], { uid: uid, stdio: [ 'ignore', out, err ]});
+    var child = spawn(process.execPath, [file], { uid: uid, stdio: [ 'ignore', out, err ], cwd : path.dirname(file)});
 
     child.on('error', function (err) {
         if (err.toString().trim().length) {
@@ -176,10 +247,18 @@ if (!isRoot || !respawned) {
 
             // deleting config file
             try {
-                fs.unlinkSync(configFile);
+                if (configFileIsDefault) fs.unlinkSync(configFile);
             } catch (ex) {
                 log("Cannot delete config file: " + ex);
             }
+
+            root_functions.watch(file, logPathDir, function() {
+                log("Files changed - restarting the application.");
+//                var ret = jxcore.utils.cmdSync('"' + process.execPath + "' monitor kill " + __filename);
+//                log('"' + process.execPath + "' monitor kill " + __filename + " : " + JSON.stringify(ret));
+                process.exit();
+            });
+
         }
     }, function (delay) {
         log("Subscribing is delayed by " + delay + " ms.");
