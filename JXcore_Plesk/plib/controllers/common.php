@@ -1337,6 +1337,10 @@ class JXconfig {
 
             $wasSet = $domain->wasSet($sid);
 
+            $edits = [Common::sidDomainJXcoreAppMaxMemLimit, Common::sidDomainJXcoreAppMaxCPULimit, Common::sidDomainJXcoreAppMaxCPUInterval];
+            if (in_array($sid, $edits) && !$vald)
+                $wasSet = false;
+
             if (!$wasSet && $valg) {
                 return $valg;
             } else {
