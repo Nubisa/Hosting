@@ -38,7 +38,7 @@ exports.createConfig = function(domain, node_ports, log_location){ // node_ports
 
                     +"  location / {\n"
                     +"    proxy_pass http://127.0.0.1:"+node_ports[i]+";\n"
-                    +"    proxy_read_timeout 99999999s;\n"
+                    +"    proxy_read_timeout 99999999;\n"
                     +"    proxy_http_version 1.1;\n"
                     +"    proxy_set_header Upgrade $http_upgrade;\n"
                     +"    proxy_set_header Connection \"Upgrade\";\n"
