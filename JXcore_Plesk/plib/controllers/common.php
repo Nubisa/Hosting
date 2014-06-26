@@ -645,7 +645,7 @@ class Common
                 . '    msg.innerHTML = "Please wait for JXcore to complete installation.. <style> .clearfix{display:none} </style>";'
                 . '    elm.appendChild(msg);'
                 . '  },1);'
-                . '}; var loop = function() { cnt--; document.getElementById("jx_refresh_count").innerHTML = cnt;  if (cnt<0) document.location.reload(); else setTimeout(loop, 1000); }; loop() ;</script>';
+                . '}; var loop = function() { cnt--; if(cnt>=0){ document.getElementById("jx_refresh_count").innerHTML = cnt; };  if (cnt<0) document.location.reload(); else setTimeout(loop, 1000); }; loop() ;</script>';
 
                 //self::$status->addMessage("info", "timestamp = $timestamp, now = $now, diff = $diff");
                 $txt = "";
