@@ -228,9 +228,11 @@ class DomainController extends pm_Controller_Action
 
             if ($actionButtonPressed) {
                 pm_Settings::set(Common::sidDomainJXcoreEnabled . $this->ID, $actionValue == "start" ? 1 : 0);
-            }
+            } else
 
+            if (!$actionButtonPressed && !$actionRestartPressed) {
 
+                $params = [];
             if ($canEdit && Common::$isAdmin) {
                 $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess,
                     Common::sidDomainJXcoreAppMaxCPULimit,
@@ -258,6 +260,8 @@ class DomainController extends pm_Controller_Action
 //                    $this->_status->addMessage("info", "$param = " . $form->getValue($param));
             }
             $this->_status->addMessage('info', 'Data was successfully saved.');
+
+            }
 
 
             if (!file_exists($this->domain->getAppPath(true))) {
