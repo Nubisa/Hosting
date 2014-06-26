@@ -233,7 +233,7 @@ class IndexController extends pm_Controller_Action
                 'value' => $buttons,
                 'description' => Common::$jxv ?
                         "When reinstalling or uninstalling, all currently running applications will be terminated!" :
-                        "JXcore version specific for this platform will be downloaded and installed."
+                        "JXcore distribution for this platform will be downloaded and installed."
             ));
 
 
@@ -262,7 +262,7 @@ class IndexController extends pm_Controller_Action
                     'label' => 'JXcore Monitor status',
                     'escape' => false,
                     'value' => $btn,
-                    'description' => $monitorRunning ? "All monitored applications will be terminated!" : "All applications with enabled JXcore support will also be launched."
+                    'description' => $monitorRunning ? "If you stop, all the monitored applications will be terminated!" : "If you start, all the JXcore enabled applications will be launched."
                 ));
 
 //                $form->addElement('checkbox', Common::sidMonitorEnabled, array(
@@ -298,7 +298,7 @@ class IndexController extends pm_Controller_Action
                         array("Between", true, array('min' => Common::minApplicationPort_default, 'max' => Common::maxApplicationPort_default)),
                         $validator
                     ),
-                    'description' => "The port range should be greater than domain count multiplied by two. Right now there are $domainCnt domains, and you need two ports for each of them.",
+                    'description' => "The port range should be greater than domain count multiplied by two (HTTP + HTTPS). Right now there are $domainCnt domains, and you need two ports for each of them.",
                     'escape' => false
                 ));
 
@@ -337,7 +337,7 @@ class IndexController extends pm_Controller_Action
                     Common::refreshValues();
 
                     if ($portsChanged) {
-//                        $this->_status->addMessage("info", "Port range has changed. Monitro will restart.");
+//                        $this->_status->addMessage("info", "Port range has changed. Monitor will be restarting.");
                         Common::reassignPorts();
                         $this->monitorStartStop("stop");
                         $this->monitorStartStop("start");
