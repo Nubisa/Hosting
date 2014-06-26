@@ -514,7 +514,7 @@ class Common
                     if ($cmd) {
                         @exec($cmd, $out, $ret);
                         if ($ret && $ret != 77) {
-                            self::$status->addMessage($ret ? "error" : "info", $msg . join("\n", $out) . ". Exit code: $ret");
+                            //self::$status->addMessage($ret ? "error" : "info", $msg . join("\n", $out) . ". Exit code: $ret");
                         } else {
                             if ($enabled && $monitorRunning) {
                                 Common::getURL(Common::$urlMonitor, $json);
@@ -917,7 +917,7 @@ class DomainInfo
         $this->id = $id;
         $this->name = $this->domain->getName();
 
-        $this->isInitialized = pm_Settings::get($this->isInitialized . $id) == "true1";
+        $this->isInitialized = $this->get($this->sidInitialized) == "true";
 
         if (!$this->isInitialized) {
             $this->set(Common::sidDomainJXcoreAppMaxCPULimit, 100);
@@ -1222,4 +1222,9 @@ class PanelClient
 //            $this->statusBar .= "Imp client. Id {$clientId}, login: {$client->getProperty('login')} <hr>";
 //        }
     }
+}
+
+
+class JXconfig {
+
 }

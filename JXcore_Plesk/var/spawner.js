@@ -268,7 +268,7 @@ if (!isRoot || !respawned) {
                     log("Files changed - restarting the application.");
     //                var ret = jxcore.utils.cmdSync('"' + process.execPath + "' monitor kill " + __filename);
     //                log('"' + process.execPath + "' monitor kill " + __filename + " : " + JSON.stringify(ret));
-                    process.exit();
+                    process.exit(77);
                 }
             });
 
