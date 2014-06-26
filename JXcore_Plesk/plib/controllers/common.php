@@ -958,13 +958,13 @@ class DomainInfo
 
         $this->isInitialized = $this->get($this->sidInitialized) == "true";
 
-        if (!$this->isInitialized) {
-            $this->set(Common::sidDomainJXcoreAppMaxCPULimit, 100);
-            $this->set(Common::sidDomainJXcoreAppAllowCustomSocketPort, 0);
-            $this->set(Common::sidDomainJXcoreAppAllowSysExec, 0);
-            $this->set(Common::sidDomainJXcoreAppAllowLocalNativeModules, 0);
-            $this->set($this->sidInitialized, "true");
-        }
+//        if (!$this->isInitialized) {
+//            $this->set(Common::sidDomainJXcoreAppMaxCPULimit, 100);
+//            $this->set(Common::sidDomainJXcoreAppAllowCustomSocketPort, 0);
+//            $this->set(Common::sidDomainJXcoreAppAllowSysExec, 0);
+//            $this->set(Common::sidDomainJXcoreAppAllowLocalNativeModules, 0);
+//            $this->set($this->sidInitialized, "true");
+//        }
     }
 
     public function get($sid) {
