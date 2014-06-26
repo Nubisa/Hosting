@@ -59,7 +59,6 @@ class DomainController extends pm_Controller_Action
         $json = "";
         $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
         $appRunning = $this->domain->isAppRunning($json);
-//        $canEdit = !$appRunning;
         $canEdit = Common::$isAdmin;
 
         $sidRestart = "restart";
@@ -82,7 +81,7 @@ class DomainController extends pm_Controller_Action
         else
             $description = $jxEnabled ? "" : "When you enable JXcore, it schedules the application to run as soon as possible.";
 
-       // $canEnable = $this->domain->canEnable();
+        // $canEnable = $this->domain->canEnable();
         $canEnable = true;
         $button = $canEnable === true ?
             Common::getButtonStartStop($jxEnabled, Common::sidDomainJXcoreEnabled, ["Enabled", "Enable"], ["Disabled", "Disable"]) :
@@ -96,6 +95,7 @@ class DomainController extends pm_Controller_Action
             'value' => $button . $restartButton,
             'description' => $description
         ));
+
 
 //        if ($canEnable !== true) {
 //            $form->addElement('simpleText', 'statuserr', array(
@@ -199,26 +199,6 @@ class DomainController extends pm_Controller_Action
 
 //        Common::addHR($form);
 
-//        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxCPULimit . $this->ID);
-//        $form->addElement($canEdit ? 'text' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppMaxCPULimit : "cpu", array(
-//            'label' => 'Max CPU',
-//            'value' => $canEdit ? $val : ($val ? "$val %" : "disabled"),
-//            'required' => false,
-//            'validators' => array(
-//                'Int', array("Between", true, array('min' => 1, 'max' => 100))
-//            ),
-//            'description' => 'Maximum CPU usage allowed for the application (percentage: 1-100).',
-//            'escape' => false
-//        ));
-//
-
-
-//        $val = pm_Settings::get(Common::sidDomainJXcoreAppAllowSpawnChild . $this->ID);
-//        $form->addElement($canEdit ? 'checkbox' : 'simpleText', $canEdit ? Common::sidDomainJXcoreAppAllowSpawnChild : "child", array(
-//            'label' => 'Prevent spawning other processes',
-//            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow"),
-//            'escape' => false
-//        ));
 
         if ($canEdit && $appRunning) {
             Common::addHR($form);
@@ -251,35 +231,35 @@ class DomainController extends pm_Controller_Action
             }
 
 
-                if ($canEdit && Common::$isAdmin) {
-                    $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess,
-                        Common::sidDomainJXcoreAppMaxCPULimit,
-                        Common::sidDomainJXcoreAppMaxCPUInterval,
-                        Common::sidDomainJXcoreAppMaxMemLimit,
-                        Common::sidDomainJXcoreAppAllowCustomSocketPort,
-                        Common::sidDomainJXcoreAppAllowSysExec,
-                        Common::sidDomainJXcoreAppAllowLocalNativeModules
-                        //  Common::sidDomainJXcoreAppAllowSpawnChild
-                    ];
+            if ($canEdit && Common::$isAdmin) {
+                $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess,
+                    Common::sidDomainJXcoreAppMaxCPULimit,
+                    Common::sidDomainJXcoreAppMaxCPUInterval,
+                    Common::sidDomainJXcoreAppMaxMemLimit,
+                    Common::sidDomainJXcoreAppAllowCustomSocketPort,
+                    Common::sidDomainJXcoreAppAllowSysExec,
+                    Common::sidDomainJXcoreAppAllowLocalNativeModules
+                    //  Common::sidDomainJXcoreAppAllowSpawnChild
+                ];
 
-                }
+            }
 
-                $changed = false;
-                foreach ($params as $param) {
-                    if (pm_Settings::get($param . $this->ID) !== $form->getValue($param))
-                        $changed = true;
-                    pm_Settings::set($param . $this->ID, $form->getValue($param));
+            $changed = false;
+            foreach ($params as $param) {
+                if (pm_Settings::get($param . $this->ID) !== $form->getValue($param))
+                    $changed = true;
+                pm_Settings::set($param . $this->ID, $form->getValue($param));
 //                    $this->_status->addMessage("info", "$param = " . $form->getValue($param));
-                }
-                $this->_status->addMessage('info', 'Data was successfully saved.');
+            }
+            $this->_status->addMessage('info', 'Data was successfully saved.');
 
 
-                if (!file_exists($this->domain->getAppPath(true))) {
-                    $this->_status->addMessage('warning', 'Application file does not exist on filesystem: ' . $this->domain->getAppPath());
-                }
+            if (!file_exists($this->domain->getAppPath(true))) {
+                $this->_status->addMessage('warning', 'Application file does not exist on filesystem: ' . $this->domain->getAppPath());
+            }
 
-
-            if ($actionRestartPressed || $changed) {
+            $this->_status->addMessage("info", "actionRestartPressed = $actionRestartPressed, changed = $changed");
+            if ($appRunning && ($actionRestartPressed || $changed)) {
                 $cmd = Common::$jxpath . " monitor kill " . $this->domain->getSpawnerPath() . " 2>&1";
 //                $cmd = $this->domain->getSpawnerExitCommand();;
                 @exec($cmd, $out, $ret);
@@ -287,9 +267,6 @@ class DomainController extends pm_Controller_Action
                     $this->_status->addMessage($ret ? "error" : "info", "Cannot stop the application: " . join("\n", $out) . ". Exit code: $ret");
                 }
             }
-
-
-
 
             Common::updateBatchAndCron($this->ID);
             $ret = Common::updatehtaccess($this->ID);
@@ -386,7 +363,7 @@ class DomainController extends pm_Controller_Action
 
         $val = pm_Settings::get(Common::sidDomainJXcoreAppAllowLocalNativeModules . $this->ID);
         $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowLocalNativeModules : ("field" . ($tmpID++)), array(
-            'label' => 'Allow to call native modules',
+            'label' => 'Allow to call local native modules',
             'description' => "",
             'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
         ));

@@ -15,12 +15,14 @@ var exitting = false;
 var log = function (str, error) {
     var str = "Spawner " + (error ? "error" : "info" ) + ":\t" + str;
 
+    console.log(str);
+
     if (!logPath) return;
 
-    if (isRoot) {
+    //if (isRoot) {
         fs.appendFileSync(logPath, str + os.EOL);
-    } //else {
-        console.log(str);
+    //} //else {
+//        console.log(str);
     //}
 };
 
@@ -42,8 +44,10 @@ if (!logPath) {
 }
 var logPathDir = path.dirname(logPath);
 
-console.log("logPath", logPath);
-console.log("logDir", logPathDir);
+
+
+//console.log("logPath", logPath);
+//console.log("logDir", logPathDir);
 
 // searching for -u arg and converting it into int uid
 var uid = null;
@@ -84,24 +88,24 @@ if (!isRoot || !respawned) {
     // exiting, so monitor can spawn the spawner as root
     // and then the spawner may spawn the app as -u (user)
 
-    var str = "Exiting, to be respawned by JXcore monitor."
-    if (!isRoot) {
-        str = "I am not a root. " + str;
-    }
-    log(str);
-
     // subscribing to monitor
     jxcore.monitor.followMe(function (err, txt) {
         if (err) {
-            log("Did not subscribed to the monitor: " + txt, true);
+            log("Did not subscribed (as user " + whoami + ") to the monitor: " + txt, true);
         } else {
             log("Subscribed successfully: " + txt);
+
+            var str = "Exiting, to be respawned by JXcore monitor."
+            if (!isRoot) {
+                str = "I am not a root. " + str;
+            }
+            log(str);
+            process.exit(77);
         }
+
     }, function (delay) {
         //log("Subscribing is delayed by " + delay+ " ms.");
-        setTimeout(function () {
-            process.exit(77);
-        }, delay + 500);
+        setTimeout(function () {}, delay + 5000);
     });
 
 } else {
@@ -223,7 +227,7 @@ if (!isRoot || !respawned) {
     // subscribing to monitor
     jxcore.monitor.followMe(function (err, txt) {
         if (err) {
-            log("Did not subscribed to the monitor: " + txt, true);
+            log("Did not subscribed (as root) to the monitor: " + txt, true);
         } else {
             log("Subscribed successfully: " + txt);
 
@@ -236,7 +240,7 @@ if (!isRoot || !respawned) {
 
             root_functions.watch( path.dirname(file), logPathDir, function(fname) {
 
-                log("CHANGED!!! " + fname + ", file = " + file);
+//                log("CHANGED!!! " + fname + ", file = " + file);
                 var restart = false;
                 if (fname == file) {
                     // app itself was changed

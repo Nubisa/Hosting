@@ -112,6 +112,8 @@ class Common
 
             $statement = $dbAdapter->query($sql);
 
+            //self::$status->addMessage("warning", $statement);
+
             while ($row = $statement->fetch()) {
                 self::$domains[intval($row['id'])] = DomainInfo::getFromRow($row);
             }
@@ -123,6 +125,8 @@ class Common
 
     public static function refreshValues()
     {
+        self::getDomains();
+
         $baseUrl = pm_Context::getBaseUrl();
         $varDir = pm_Context::getVarDir();
 
@@ -160,6 +164,9 @@ class Common
 
         self::$pathSpawner = pm_Context::getVarDir() . "spawner.js";
         self::$pathService = pm_Context::getVarDir() . "jxcore_service.js";
+
+//        $takenPorts = self::getTakenAppPorts();
+//        self::$status->addMessage("info", "min = " . self::$minApplicationPort. ", max = ".self::$maxApplicationPort. ". Taken ports: " . join(",", $takenPorts));
     }
 
     public static function addHR(&$form)
@@ -358,54 +365,16 @@ class Common
             return;
         }
 
-return;
-        $ssl = null;
-        $domainId = null;
+        $port = self::$minApplicationPort;
+
         $rows = self::$domains;
-$str = "";
-        $portsTaken = [];
         foreach ($rows as $id => $domain) {
-            $me = $domainId && $id == $domainId;
-
-//            if ($clientId && $domain->row['cl_id'] != $clientId) continue;
-            // array of strings
-
-//            if (($me && $ssl !== false) || !$me) {
-            $skip = $domainId && $id == $domainId && ($ssl === false || $ssl === null);
-            if (!$skip) {
-                $port = pm_Settings::get(Common::sidDomainJXcoreAppPort . $domain->row['id']);
-                if ($port && ctype_digit($port))
-                    $portsTaken[] = $port;
-            } else {
-                $str .= "skipping " . Common::sidDomainJXcoreAppPort . $domain->row['id'];
-            }
-            $skip = $domainId && $id == $domainId &&  ($ssl === true || $ssl === null);
-//            if (($me && $ssl !== true) || !$me) {
-            if (!$skip) {
-                $port = pm_Settings::get(Common::sidDomainJXcoreAppPortSSL . $domain->row['id']);
-                if ($port && ctype_digit($port))
-                    $portsTaken[] = $port;
-            }else {
-                $str .= "skipping " . Common::sidDomainJXcoreAppPortSSL . $domain->row['id'];
-            }
+            $domain->set(Common::sidDomainJXcoreAppPort, $port++);
+            $domain->set(Common::sidDomainJXcoreAppPortSSL, $port++);
         }
 
 
 
-
-//        $takenPorts = self::getTakenAppPorts();
-//        var_dump($takenPorts);
-        self::$status->addMessage("info", "Taken ports: " . join(",", $portsTaken));
-        self::$status->addMessage("info", "str: $str");
-
-      //  foreach ($takenPorts as $port) {
-//            if (!$port) continue;
-//            var_dump($port);
-//            if ($port < self::$minApplicationPort || $port > self::$maxApplicationPort) {
-//                self::$status->addMessage("warning", "Some of the applications ports out out of the range now. They are still running on old ports.");
-//                break;
-//            }
-      //  }
     }
 
     public static function checkPortRange($domainId = null)
@@ -474,13 +443,14 @@ $str = "";
                 '',
                 'cd ' . dirname(Common::$jxpath),
                 './jx monitor start',
-                './jx monitor run ' . Common::$pathService
+                './jx monitor run ' . Common::$pathService . " &"
             ];
 
             foreach (self::$domains as $id=>$domain) {
                 $domain = Common::getDomain($id);
                 $client = new PanelClient($domain->row['cl_id']);
 //                self::$status->addMessage("info", "user clid {$row['cl_id']}, sysUser {$client->sysUser}");
+//                self::$status->addMessage("info", "user clid {$row['cl_id']}, name {$domain->name}");
 
                 $enabled = $domain->JXcoreSupportEnabled();
                 $path = $domain->getAppPath(true);
@@ -499,7 +469,7 @@ $str = "";
 
                 if ($enabled) {
                     $commands[] = '';
-                    $commands[] = "if [ -e {$path} ]; then";
+                    $commands[] = "if [ -e {$spawner} ]; then";
                     $commands[] = $cmd;
                     $commands[] = "fi";
                 }
@@ -916,8 +886,12 @@ class DomainInfo
     private $domain = null;
     private $fileManager = null;
 
+    public $isInitialized = false;
+
     const appLogBasename = "index.html";
     const appPath_default = "index.js";
+
+    private $sidInitialized = "_domain_initialized";
 
     public $row = null;
 
@@ -942,6 +916,24 @@ class DomainInfo
         $this->fileManager = new pm_FileManager($id);
         $this->id = $id;
         $this->name = $this->domain->getName();
+
+        $this->isInitialized = pm_Settings::get($this->isInitialized . $id) == "true1";
+
+        if (!$this->isInitialized) {
+            $this->set(Common::sidDomainJXcoreAppMaxCPULimit, 100);
+            $this->set(Common::sidDomainJXcoreAppAllowCustomSocketPort, 0);
+            $this->set(Common::sidDomainJXcoreAppAllowSysExec, 0);
+            $this->set(Common::sidDomainJXcoreAppAllowLocalNativeModules, 0);
+            $this->set($this->sidInitialized, "true");
+        }
+    }
+
+    public function get($sid) {
+        return pm_Settings::get($sid . $this->id);
+    }
+
+    public function set($sid, $value) {
+        return pm_Settings::set($sid . $this->id, $value);
     }
 
     public function isAppRunning($json = null)

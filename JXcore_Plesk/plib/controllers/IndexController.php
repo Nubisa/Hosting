@@ -286,16 +286,28 @@ class IndexController extends pm_Controller_Action
                     'escape' => false
                 ));
 
+                $domainCnt = count(Common::getDomainsIDs());
+                $validator = new MyValid_PortMax();
+                $validator->newMinimum = $req->getParam(Common::sidJXcoreMinimumPortNumber);
                 $form->addElement('text', Common::sidJXcoreMaximumPortNumber, array(
                     'label' => 'Maximum app port number',
                     'value' => Common::$maxApplicationPort,
                     'required' => true,
                     'validators' => array('Int',
                         array("GreaterThan", true, array('min' => $req->getParam(Common::sidJXcoreMinimumPortNumber))),
-                        array("Between", true, array('min' => Common::minApplicationPort_default, 'max' => Common::maxApplicationPort_default))
+                        array("Between", true, array('min' => Common::minApplicationPort_default, 'max' => Common::maxApplicationPort_default)),
+                        $validator
                     ),
-                    'description' => '',
+                    'description' => "The port range should be greater than domain count multiplied by two. Right now there are $domainCnt domains, and you need two ports for each of them.",
                     'escape' => false
+                ));
+
+
+                $form->addElement('simpleText', "restartmayoccur", array(
+                    'label' => '',
+                    'escape' => false,
+                    'value' => "<span style='color: red;'>Changing the ports range may result in restarting of all the applications.</span>",
+                    'description' => ""
                 ));
 
                 $form->addControlButtons(array(
@@ -321,14 +333,15 @@ class IndexController extends pm_Controller_Action
                         pm_Settings::set($param, $form->getValue($param));
                     }
 
-                    if ($portsChanged) {
-                        $this->_status->addMessage("info", "Ports has changed");
-                        //todo: unfinished
-                        Common::reassignPorts();
-                    }
-
                     Common::updateBatchAndCron(null);
                     Common::refreshValues();
+
+                    if ($portsChanged) {
+//                        $this->_status->addMessage("info", "Port range has changed. Monitro will restart.");
+                        Common::reassignPorts();
+                        $this->monitorStartStop("stop");
+                        $this->monitorStartStop("start");
+                    }
                     $this->_status->addMessage('info', 'Data was successfully saved.');
                 }
                 $this->_helper->json(array('redirect' => Common::$urlJXcoreConfig));
@@ -441,25 +454,11 @@ class IndexController extends pm_Controller_Action
                 pm_Settings::set(Common::sidDomainJXcoreEnabled . $id, !$status);
                 $status = !$status;
 
-                // when enabling, we apply default values (if empty)
-//                if ($status) {
-//                    $domain->getAppPathOrDefault(false, true);
-//                    $domain->getAppPortOrDefault(true);
-//                }
-
                 Common::updateBatchAndCron($id);
 
                 $ret = Common::updatehtaccess($id);
                 if ($ret !== true) $this->_status->addMessage('error', $ret);
             }
-
-            $ret = $domain->canEnable();
-            $switch = //$ret === true ?
-//                Common::getButtonStartStop($status, "id", ["Enabled", "Enable"], ["Disabled", "Disable"], $switchUrl) :
-//                Common::getIcon($status, "Enabled", "Disabled");
-
-           // $cl = new PanelClient($domain->row['cl_id']);
-//            $sysUser = $cl->sysUser;
 
             $data[] = array(
                 'column-1' => $id,
@@ -715,3 +714,50 @@ class IndexController extends pm_Controller_Action
 
 }
 
+
+
+
+class MyValid_PortMax extends Zend_Validate_Abstract
+{
+    const MSG_MINIMUM = 'msgMinimum';
+    const MSG_MAXIMUM = 'msgMaximum';
+    const MSG_TOOLITTLE = 'msgTooLittle';
+
+
+    public $newMinimum = 0;
+    public $newMaximum = 0;
+
+    public $minimum = 0;
+    public $maximum = 0;
+    public $domainCount = 0;
+
+    protected $_messageVariables = array(
+        'min' => 'minimum',
+        'max' => 'maximum',
+        'cnt' => 'domainCount'
+    );
+
+    protected $_messageTemplates = array(
+        self::MSG_MINIMUM => "'%value%' must be at least '%min%'",
+        self::MSG_MAXIMUM => "'%value%' must be no more than '%max%'",
+        self::MSG_TOOLITTLE => "Too small range. You need at least %cnt% ports."
+    );
+
+    public function isValid($value)
+    {
+//        $this->minimum = Common::$minApplicationPort;
+//        $this->maximum = Common::$maxApplicationPort;
+
+        $this->_setValue($value);
+
+
+        $this->domainCount = count(Common::getDomainsIDs()) * 2;
+
+        if ($value - $this->newMinimum + 1 < $this->domainCount) {
+            $this->_error(self::MSG_TOOLITTLE);
+            return false;
+        }
+
+        return true;
+    }
+}
