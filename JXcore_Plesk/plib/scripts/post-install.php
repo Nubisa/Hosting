@@ -32,7 +32,7 @@ $request = <<<APICALL
          <noframe>true</noframe>
          <place>navigation</place>
          <url>$baseUrl</url>
-         <text>JXcore support</text>
+         <text>JXcore Node.JS</text>
       </properties>
    </create-custombutton>
 </ui>

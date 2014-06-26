@@ -8,7 +8,7 @@ class IndexController extends pm_Controller_Action
         parent::init();
 
         // Init title for all actions
-        $this->view->pageTitle = 'JXcore support for domains';
+        $this->view->pageTitle = 'JXcore Node.JS Management Panel';
 
         require_once("common.php");
         $this->common = new Common($this, $this->_status);
@@ -489,7 +489,7 @@ class IndexController extends pm_Controller_Action
                 'noEscape' => true,
             ),
             'column-4' => array(
-                'title' => 'JXcore support',
+                'title' => 'JXcore Node.JS',
                 'noEscape' => true,
             ),
             'column-5' => array(

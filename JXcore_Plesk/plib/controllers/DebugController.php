@@ -8,7 +8,7 @@ class DebugController extends pm_Controller_Action
         parent::init();
 
         // Init title for all actions
-        $this->view->pageTitle = 'JXcore support for domains';
+        $this->view->pageTitle = 'JXcore Node.JS Management Panel';
 
         require_once("common.php");
         $this->common = new Common($this, $this->_status);

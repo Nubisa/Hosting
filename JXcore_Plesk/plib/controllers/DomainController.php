@@ -18,7 +18,7 @@ class DomainController extends pm_Controller_Action
                 'action' => 'config',
             ),
             array(
-                'title' => 'JXcore application log ',
+                'title' => 'JXcore Node.JS application log ',
                 'action' => 'log',
             ),
 //            array(
@@ -77,9 +77,9 @@ class DomainController extends pm_Controller_Action
         ));
 
         if ($monitorRunning)
-            $description = $jxEnabled ? "When you disable JXcore support, if there is running JXcore application, it will be terminated!" : "When you enable JXcore support, JXcore application will also be launched.";
+            $description = $jxEnabled ? "If you disable JXcore for the domain, the running Node.JS application will be terminated!" : "When you enable JXcore support, JXcore application will also be launched.";
         else
-            $description = $jxEnabled ? "" : "When you enable JXcore support, JXcore application will be scheduled to be launched as soon as JXcore Monitor will be started by an administrator.";
+            $description = $jxEnabled ? "" : "When you enable JXcore, it schedules the application to run as soon as possible.";
 
         $canEnable = $this->domain->canEnable();
         $button = $canEnable === true ?
@@ -89,7 +89,7 @@ class DomainController extends pm_Controller_Action
         $restartButton = $monitorRunning && $jxEnabled ? Common::getSimpleButton($sidRestart, "Restart application", "restart", "/theme/icons/16/plesk/show-all.png") : "";
 
         $form->addElement('simpleText', 'status', array(
-            'label' => 'JXcore support',
+            'label' => 'JXcore Node.JS',
             'escape' => false,
             'value' => $button . $restartButton,
             'description' => $description
@@ -99,7 +99,7 @@ class DomainController extends pm_Controller_Action
             $form->addElement('simpleText', 'statuserr', array(
                 'label' => '',
                 'escape' => false,
-                'value' => "Cannot enable JXcore support: $canEnable",
+                'value' => "Can not enable JXcore: $canEnable",
 //                'description' => $description
             ));
         }
@@ -119,7 +119,7 @@ class DomainController extends pm_Controller_Action
                 'label' => '',
                 'escape' => false,
                 'value' => "<span style='color: red;'>Options below can be changed only when application is not running (JXcore support is disabled).</span>",
-                'description' => $jxEnabled ? "" : "Application will start automatically when JXcore support will be enabled."
+                'description' => $jxEnabled ? "" : "Application will start automatically when JXcore support is enabled."
             ));
         }
 
@@ -130,7 +130,7 @@ class DomainController extends pm_Controller_Action
             'label' => 'Application status',
             'escape' => false,
             'value' => $this->domain->getAppStatus(),
-            'description' => $jxEnabled ? "" : "Application will start automatically when JXcore support will be enabled."
+            'description' => $jxEnabled ? "" : "Application will start automatically when JXcore support is enabled."
         ));
 
         $form->addElement($canEdit ? 'text' : 'simpleText', Common::sidDomainJXcoreAppPath, array(

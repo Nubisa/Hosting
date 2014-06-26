@@ -22,9 +22,9 @@ exports.resetInterfaces();
 
 exports.createConfig = function(domain, node_ports, log_location){ // node_ports is an array (first http, second https)
     var config_str = "map $http_upgrade $connection_upgrade {\n"
-                    +"  default upgrade;\n"
-                    +"  '' close;\n"
-                    +"}\n\n";
+        +"  default upgrade;\n"
+        +"  '' close;\n"
+        +"}\n\n";
 
     var sports = ["80", "443"];
     for(var i in sports){
@@ -38,21 +38,16 @@ exports.createConfig = function(domain, node_ports, log_location){ // node_ports
 
                     +"  location / {\n"
                     +"    proxy_pass http://127.0.0.1:"+node_ports[i]+";\n"
-                 //   +"    proxy_read_timeout 999999999s;\n"
+                    +"    proxy_read_timeout 99999999s;\n"
+                    +"    proxy_http_version 1.1;\n"
                     +"    proxy_set_header Upgrade $http_upgrade;\n"
                     +"    proxy_set_header Connection \"Upgrade\";\n"
-                    +"  }\n";
-
-            if (log_location) {
-                str_config +=
-                    "  location /jxcore_logs {\n"
+                    +"  }\n"
+                    +"  location /jxcore_logs {\n"
                     +"    autoindex on;\n"
                     +"    alias "+log_location+";\n"
-                    +"  }\n";
-            }
-
-                str_config +=
-                    "}\n";
+                    +"  }\n"
+                    +"}\n";
 
             config_str += str_config + "\n\n";
         }
