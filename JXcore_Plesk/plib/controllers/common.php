@@ -514,6 +514,7 @@ $str = "";
 
                     $msg = "";
                     if (!$enabled && $appRunning) {
+                        // stopping application
 
                         $nginexconf = "/etc/nginx/jxcore.conf.d/" . $domain->name . ".conf";
                         if (@file_exists($nginexconf)) {
@@ -524,8 +525,9 @@ $str = "";
                         $cmd = Common::$jxpath . " monitor kill {$spawner} 2>&1";
 //                        $cmd = $domain->getSpawnerExitCommand(true);
                         $msg = " Cannot stop the application: ";
-                        $sleep += 2; // wait little longer for monitor to respawn an app
+//                        $sleep += 2; // wait little longer for monitor to respawn an app
                     } else if ($enabled && !$appRunning) {
+                        // starting application
                         if (!$monitorRunning) {
                             // no point to run an application now, if monitor is not running
                             $cmd = "";
@@ -543,7 +545,14 @@ $str = "";
                         @exec($cmd, $out, $ret);
                         if ($ret && $ret != 77) {
                             self::$status->addMessage($ret ? "error" : "info", $msg . join("\n", $out) . ". Exit code: $ret");
+                        } else {
+                            if ($enabled && $monitorRunning) {
+                                Common::getURL(Common::$urlMonitor, $json);
+                                $appRunning = strpos($json, $path) !== false;
+                                self::$status->addMessage($appRunning ? "info" : "error", $appRunning ? "The application successfully started." : "The application could not be started.");
+                            }
                         }
+
                         // let the monitor respawn app as root
                         sleep($sleep);
                     }

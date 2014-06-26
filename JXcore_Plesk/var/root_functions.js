@@ -7,9 +7,9 @@ var path = require("path");
 var fw = require("./folderWatch.js");
 
 
-exports.watch = function (appFileName, appLogDir, cb) {
+exports.watch = function (dir, appLogDir, cb) {
 
-    var dir = path.dirname(appFileName);// + path.sep;
+    //var dir = path.dirname(appFileName);
     fw.watch(dir);
     console.log("watching", dir);
 
@@ -32,7 +32,7 @@ exports.watch = function (appFileName, appLogDir, cb) {
 
         if (cb) {
             setTimeout(function () {
-                cb(true);
+                cb(path.join(dir, "/", file));
                 changed = false;
             }, 500);
         }

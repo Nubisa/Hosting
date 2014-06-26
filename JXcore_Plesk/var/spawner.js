@@ -19,9 +19,9 @@ var log = function (str, error) {
 
     if (isRoot) {
         fs.appendFileSync(logPath, str + os.EOL);
-    } else {
+    } //else {
         console.log(str);
-    }
+    //}
 };
 
 
@@ -41,6 +41,9 @@ if (!logPath) {
     process.exit(7);
 }
 var logPathDir = path.dirname(logPath);
+
+console.log("logPath", logPath);
+console.log("logDir", logPathDir);
 
 // searching for -u arg and converting it into int uid
 var uid = null;
@@ -103,52 +106,6 @@ if (!isRoot || !respawned) {
 
 } else {
 
-    var root_functions = require("./root_functions.js");
-
-    var checkAccess = function (path) {
-        var str = 'sudo -u "' + user + '" -- test -r "' + path + '" && echo "OK"';
-        var ret = jxcore.utils.cmdSync(str);
-
-//        log("checking " + str + JSON.stringify(ret));
-        if (ret.out.toString().trim() !== "OK") {
-            log("User " + user + " has no read access to file " + path, true);
-            process.exit(7);
-        }
-    };
-
-    var file = options.file;
-
-    checkAccess(file);
-    checkAccess(path.dirname(file));
-
-    // ########  saving nginx conf
-    var confDir = "/etc/nginx/jxcore.conf.d/";
-    var confFile = confDir + options.domain + ".conf";
-
-    if (fs.existsSync(confDir)) {
-        var nginx = require("./nginxconf.js");
-        nginx.resetInterfaces();
-        var logWebAccess = options.logWebAccess == 1 || options.logWebAccess == "true";
-        var conf = nginx.createConfig(options.domain, [ options.tcp, options.tcps], logWebAccess ? path.dirname(logPath) : null);
-
-        try {
-            fs.writeFileSync(confFile, conf);
-            var ret = jxcore.utils.cmdSync("chown psaadm:nginx " + confFile + "; /etc/init.d/nginx reload");
-            if (ret.exitCode) {
-                log("Cannot reload nginx config: " + ret.out);
-            }
-//            log("return from nginx reload: " + JSON.stringify(ret));
-        } catch(ex) {
-            log("Cannot save nginx conf file: " + ex);
-        }
-    }
-    //
-
-
-    // this can be done only by privileged user.
-    // node throws exception otherwise
-    var spawn = require('child_process').spawn;
-
     var out = 'ignore';
     var err = 'ignore';
 
@@ -179,6 +136,46 @@ if (!isRoot || !respawned) {
         }
     }
 
+    var root_functions = require("./root_functions.js");
+
+    var checkAccess = function (path) {
+        var str = 'sudo -u "' + user + '" -- test -r "' + path + '" && echo "OK"';
+        var ret = jxcore.utils.cmdSync(str);
+
+//        log("checking " + str + JSON.stringify(ret));
+        if (ret.out.toString().trim() !== "OK") {
+            log("User " + user + " has no read access to file " + path, true);
+            process.exit(7);
+        }
+    };
+
+    var file = options.file;
+
+    //checkAccess(file);
+    checkAccess(path.dirname(file));
+
+    // ########  saving nginx conf
+    var confDir = "/etc/nginx/jxcore.conf.d/";
+    var confFile = confDir + options.domain + ".conf";
+
+    if (fs.existsSync(confDir)) {
+        var nginx = require("./nginxconf.js");
+        nginx.resetInterfaces();
+        var logWebAccess = options.logWebAccess == 1 || options.logWebAccess == "true";
+        var conf = nginx.createConfig(options.domain, [ options.tcp, options.tcps], logWebAccess ? path.dirname(logPath) : null);
+
+        try {
+            fs.writeFileSync(confFile, conf);
+            var ret = jxcore.utils.cmdSync("chown psaadm:nginx " + confFile + "; /etc/init.d/nginx reload");
+            if (ret.exitCode) {
+                log("Cannot reload nginx config: " + ret.out);
+            }
+//            log("return from nginx reload: " + JSON.stringify(ret));
+        } catch(ex) {
+            log("Cannot save nginx conf file: " + ex);
+        }
+    }
+
     delete options.log;
     delete options.user;
     delete options.file;
@@ -203,19 +200,25 @@ if (!isRoot || !respawned) {
 //    log("app cfg file: " + configFile);
     fs.writeFileSync(configFile, JSON.stringify(options));
 
-    var child = spawn(process.execPath, [file], { uid: uid, stdio: [ 'ignore', out, err ], cwd : path.dirname(file)});
+    // this can be done only by privileged user.
+    // node throws exception otherwise
+    // and if file does not exists, fileWatcher fill check for this
+    if (fs.existsSync(file)) {
+        var spawn = require('child_process').spawn;
+        var child = spawn(process.execPath, [file], { uid: uid, stdio: [ 'ignore', out, err ], cwd : path.dirname(file)});
 
-    child.on('error', function (err) {
-        if (err.toString().trim().length) {
-            log("Child error: " + err, true);
-        }
-    });
+        child.on('error', function (err) {
+            if (err.toString().trim().length) {
+                log("Child error: " + err, true);
+            }
+        });
 
-    child.on('exit', function () {
-        if (!exitting) {
-            process.exit();
-        }
-    });
+        child.on('exit', function () {
+            if (!exitting) {
+                process.exit();
+            }
+        });
+    }
 
     // subscribing to monitor
     jxcore.monitor.followMe(function (err, txt) {
@@ -231,11 +234,38 @@ if (!isRoot || !respawned) {
                 log("Cannot delete config file: " + ex);
             }
 
-            root_functions.watch(file, logPathDir, function() {
-                log("Files changed - restarting the application.");
-//                var ret = jxcore.utils.cmdSync('"' + process.execPath + "' monitor kill " + __filename);
-//                log('"' + process.execPath + "' monitor kill " + __filename + " : " + JSON.stringify(ret));
-                process.exit();
+            root_functions.watch( path.dirname(file), logPathDir, function(fname) {
+
+                log("CHANGED!!! " + fname + ", file = " + file);
+                var restart = false;
+                if (fname == file) {
+                    // app itself was changed
+                    if (!fs.existsSync(fname)) {
+                        // lets kill the child
+
+                        try {
+                            if (child) {
+                                exitting = true;
+                                process.kill(child.pid);
+                                child = null;
+                                exitting = false;
+                            }
+                        } catch (ex) {
+                        }
+                    } else {
+                        // child was killed previously, so lets restart the app
+                        if (!child) restart = true;
+                    }
+                } else {
+                    restart = true;
+                }
+
+                if (restart) {
+                    log("Files changed - restarting the application.");
+    //                var ret = jxcore.utils.cmdSync('"' + process.execPath + "' monitor kill " + __filename);
+    //                log('"' + process.execPath + "' monitor kill " + __filename + " : " + JSON.stringify(ret));
+                    process.exit();
+                }
             });
 
         }

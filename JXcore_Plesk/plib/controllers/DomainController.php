@@ -59,7 +59,8 @@ class DomainController extends pm_Controller_Action
         $json = "";
         $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
         $appRunning = $this->domain->isAppRunning($json);
-        $canEdit = !$appRunning;
+//        $canEdit = !$appRunning;
+        $canEdit = Common::$isAdmin;
 
         $sidRestart = "restart";
 
@@ -81,7 +82,8 @@ class DomainController extends pm_Controller_Action
         else
             $description = $jxEnabled ? "" : "When you enable JXcore, it schedules the application to run as soon as possible.";
 
-        $canEnable = $this->domain->canEnable();
+       // $canEnable = $this->domain->canEnable();
+        $canEnable = true;
         $button = $canEnable === true ?
             Common::getButtonStartStop($jxEnabled, Common::sidDomainJXcoreEnabled, ["Enabled", "Enable"], ["Disabled", "Disable"]) :
             Common::getIcon($jxEnabled, "Enabled", "Disabled");
@@ -95,14 +97,14 @@ class DomainController extends pm_Controller_Action
             'description' => $description
         ));
 
-        if ($canEnable !== true) {
-            $form->addElement('simpleText', 'statuserr', array(
-                'label' => '',
-                'escape' => false,
-                'value' => "Can not enable JXcore: $canEnable",
-//                'description' => $description
-            ));
-        }
+//        if ($canEnable !== true) {
+//            $form->addElement('simpleText', 'statuserr', array(
+//                'label' => '',
+//                'escape' => false,
+//                'value' => "Cannot enable JXcore: $canEnable",
+////                'description' => $description
+//            ));
+//        }
 
 //        Common::addHR($form);
 //
@@ -113,15 +115,15 @@ class DomainController extends pm_Controller_Action
 //        ));
 
 
-        if (!$canEdit) {
-            Common::addHR($form);
-            $form->addElement('simpleText', "cannotedit", array(
-                'label' => '',
-                'escape' => false,
-                'value' => "<span style='color: red;'>Options below can be changed only when application is not running (JXcore support is disabled).</span>",
-                'description' => $jxEnabled ? "" : "Application will start automatically when JXcore support is enabled."
-            ));
-        }
+//        if (!$canEdit && Common::$isAdmin) {
+//            Common::addHR($form);
+//            $form->addElement('simpleText', "cannotedit", array(
+//                'label' => '',
+//                'escape' => false,
+//                'value' => "<span style='color: red;'>Options below can be changed only when application is not running (JXcore support is disabled).</span>",
+//                'description' => $jxEnabled ? "" : "Application will start automatically when JXcore support is enabled."
+//            ));
+//        }
 
 
         Common::addHR($form);
@@ -218,6 +220,16 @@ class DomainController extends pm_Controller_Action
 //            'escape' => false
 //        ));
 
+        if ($canEdit && $appRunning) {
+            Common::addHR($form);
+            $form->addElement('simpleText', "someWarning", array(
+                'label' => '',
+                'escape' => false,
+                'value' => "<span style='color: red;'>Submitting the form will restart the application.</span>"
+            ));
+        }
+
+
         $form->addElement('hidden', 'id', array(
             'value' => pm_Settings::get($this->ID),
         ));
@@ -236,20 +248,9 @@ class DomainController extends pm_Controller_Action
 
             if ($actionButtonPressed) {
                 pm_Settings::set(Common::sidDomainJXcoreEnabled . $this->ID, $actionValue == "start" ? 1 : 0);
-            } else if ($actionRestartPressed) {
-                $cmd = Common::$jxpath . " monitor kill " . $this->domain->getSpawnerPath() . " 2>&1";
-//                $cmd = $this->domain->getSpawnerExitCommand();;
-                @exec($cmd, $out, $ret);
-                if ($ret && $ret != 77) {
-                    $this->_status->addMessage($ret ? "error" : "info", "Cannot stop the application: " . join("\n", $out) . ". Exit code: $ret");
-                }
-                // wait a little for monitor to respawn an app
-//                sleep(2);
-//                else {
-//                    $this->_status->addMessage("info", "Application is stopped.");
-//                }
-                // application will start in updateBatchAndCron()
-            } else {
+            }
+
+
                 if ($canEdit && Common::$isAdmin) {
                     $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess,
                         Common::sidDomainJXcoreAppMaxCPULimit,
@@ -261,17 +262,12 @@ class DomainController extends pm_Controller_Action
                         //  Common::sidDomainJXcoreAppAllowSpawnChild
                     ];
 
-//                    if (Common::$isAdmin) {
-//                        $params[] = Common::sidDomainJXcoreAppPort;
-//                        $params[] = Common::sidDomainJXcoreAppPortSSL;
-//                    }
-
                 }
-//                else {
-//                    $params = [Common::sidDomainAppLogWebAccess];
-//                }
 
+                $changed = false;
                 foreach ($params as $param) {
+                    if (pm_Settings::get($param . $this->ID) !== $form->getValue($param))
+                        $changed = true;
                     pm_Settings::set($param . $this->ID, $form->getValue($param));
 //                    $this->_status->addMessage("info", "$param = " . $form->getValue($param));
                 }
@@ -282,7 +278,18 @@ class DomainController extends pm_Controller_Action
                     $this->_status->addMessage('warning', 'Application file does not exist on filesystem: ' . $this->domain->getAppPath());
                 }
 
+
+            if ($actionRestartPressed || $changed) {
+                $cmd = Common::$jxpath . " monitor kill " . $this->domain->getSpawnerPath() . " 2>&1";
+//                $cmd = $this->domain->getSpawnerExitCommand();;
+                @exec($cmd, $out, $ret);
+                if ($ret && $ret != 77) {
+                    $this->_status->addMessage($ret ? "error" : "info", "Cannot stop the application: " . join("\n", $out) . ". Exit code: $ret");
+                }
             }
+
+
+
 
             Common::updateBatchAndCron($this->ID);
             $ret = Common::updatehtaccess($this->ID);
@@ -310,9 +317,10 @@ class DomainController extends pm_Controller_Action
         // allowSysExec: bool
         // allowLocalNativeModules: bool
 
-        if (!Common::$isAdmin) {
-            return;
-        }
+        $canEdit = Common::$isAdmin;
+//        if (!Common::$isAdmin) {
+//            return;
+//        }
 
         Common::addHR($form);
 
@@ -422,7 +430,7 @@ class DomainController extends pm_Controller_Action
         $form->addElement('text', $sidLastLinesCount, array(
             'label' => 'Show last # lines',
             'value' => $val,
-            'required' => true,
+            'required' => false,
             'validators' => array(
                 'Int',
             ),

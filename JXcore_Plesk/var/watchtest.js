@@ -7,7 +7,7 @@ var arg = process.argv[process.argv.length - 1];
 
 if (arg == "new") {
     var fw = require("./root_functions.js");
-    fw.watch("/var/www/vhosts/krissubscription.com/httpdocs/index2.js", "/var/www/vhosts/krissubscription.com/httpdocs/jxcore_logs//", function () {
+    fw.watch("/var/www/vhosts/krissubscription.com/httpdocs/", "/var/www/vhosts/krissubscription.com/httpdocs/jxcore_logs//", function () {
         console.log("Files changed - restarting the application.");
     });
 } else {
