@@ -635,13 +635,24 @@ class Common
             if ($addMessage) {
                 // $waitSeconds = 10;
                 $waitSeconds = $diff + 10;
-                $refresh = '<script type="text/javascript">var cnt = ' . $waitSeconds . '; var loop = function() { cnt--; document.getElementById("jx_refresh_count").innerHTML = cnt;  if (cnt<0) document.location.reload(); else setTimeout(loop, 1000); }; loop() ;</script>';
+                $refresh = '<script type="text/javascript">var cnt = ' . $waitSeconds
+                . '; '
+                . 'if(cnt>0){'
+                . '  setTimeout(function(){'
+                . '    var elm = document.getElementById("content");'
+                . '    var msg = document.createElement("div");'
+                . '    msg.id = "__waitjx"; msg.name = "__waitjx";'
+                . '    msg.innerHTML = "Please wait for JXcore to complete installation.. <style> .clearfix{display:none} </style>";'
+                . '    elm.appendChild(msg);'
+                . '  },1);'
+                . '}; var loop = function() { cnt--; document.getElementById("jx_refresh_count").innerHTML = cnt;  if (cnt<0) document.location.reload(); else setTimeout(loop, 1000); }; loop() ;</script>';
+
                 //self::$status->addMessage("info", "timestamp = $timestamp, now = $now, diff = $diff");
                 $txt = "";
-                if ($action == 'start') $txt = "Monitor should be launched in approx {$diff} seconds.";
+                if ($action == 'start') $txt = "Operation will be completed in {$diff} seconds.";
                 if ($action == 'stop') $txt = "Monitor should be stopped in approx {$diff} seconds.";
 
-                $str = "$txt Page will refresh after <span id='jx_refresh_count' name='jx_refresh_count'>5</span> seconds." . $refresh;
+                $str = "$txt Page will be refreshed in <span id='jx_refresh_count' name='jx_refresh_count'>5</span> seconds." . $refresh;
                 self::$status->addMessage('info', $str);
             }
         } else {
