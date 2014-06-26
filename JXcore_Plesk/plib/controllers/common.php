@@ -649,10 +649,10 @@ class Common
 
                 //self::$status->addMessage("info", "timestamp = $timestamp, now = $now, diff = $diff");
                 $txt = "";
-                if ($action == 'start') $txt = "Operation will be completed in {$diff} seconds.";
+                if ($action == 'start') $txt = "Completing the operation..";
                 if ($action == 'stop') $txt = "Monitor should be stopped in approx {$diff} seconds.";
 
-                $str = "$txt Page will be refreshed in <span id='jx_refresh_count' name='jx_refresh_count'>5</span> seconds." . $refresh;
+                $str = "$txt Page will be reloaded in <span id='jx_refresh_count' name='jx_refresh_count'>5</span> seconds." . $refresh;
                 self::$status->addMessage('info', $str);
             }
         } else {
