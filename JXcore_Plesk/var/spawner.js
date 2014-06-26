@@ -258,7 +258,7 @@ if (!isRoot || !respawned) {
                         }
                     } else {
                         // child was killed previously, so lets restart the app
-                        if (!child) restart = true;
+                        restart = true;
                     }
                 } else {
                     restart = true;
