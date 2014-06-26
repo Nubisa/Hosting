@@ -110,7 +110,7 @@ class DomainController extends pm_Controller_Action
 //
 //        $form->addElement('checkbox', Common::sidDomainAppLogWebAccess, array(
 //            'label' => 'Application\'s log web access',
-//            'description' => "Will be available on http://" . $this->domain->name . "/" . DomainInfo::appLogBasename,
+//            'description' => "Will be available form <a target=\'_blank\' href=\'http://" . $this->domain->name . "/index.txt\'>http://" . $this->domain->name . "/index.txt</a>" . DomainInfo::appLogBasename,
 //            'value' => $this->domain->getAppLogWebAccess()
 //        ));
 

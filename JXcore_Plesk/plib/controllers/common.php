@@ -888,7 +888,7 @@ class DomainInfo
 
     public $isInitialized = false;
 
-    const appLogBasename = "index.html";
+    const appLogBasename = "index.txt";
     const appPath_default = "index.js";
 
     private $sidInitialized = "_domain_initialized";
