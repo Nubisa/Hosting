@@ -42,12 +42,12 @@ class Common
     const sidDomainJXcoreAppPortSSL = "jx_domain_app_port_ssl";
     const sidDomainJXcoreAppPath = "jx_domain_app_path";
 
-    const sidDomainJXcoreAppMaxCPULimit = "jx_domain_app_max_cpu";
-    const sidDomainJXcoreAppMaxCPUInterval = "jx_domain_app_max_cpu_interval";
-    const sidDomainJXcoreAppMaxMemLimit = "jx_domain_app_max_mem";
-    const sidDomainJXcoreAppAllowCustomSocketPort = "jx_domain_app_allowCustomSocketPort";
-    const sidDomainJXcoreAppAllowSysExec = "jx_domain_app_allowSysExec";
-    const sidDomainJXcoreAppAllowLocalNativeModules = "jx_domain_app_allowLocalNativeModules";
+    const sidDomainJXcoreAppMaxCPULimit = "jxparam_maxCPU";
+    const sidDomainJXcoreAppMaxCPUInterval = "jxparam_maxCPUInterval";
+    const sidDomainJXcoreAppMaxMemLimit = "jxparam_maxMemory";
+    const sidDomainJXcoreAppAllowCustomSocketPort = "jxparam_allowCustomSocketPort";
+    const sidDomainJXcoreAppAllowSysExec = "jxparam_allowSysExec";
+    const sidDomainJXcoreAppAllowLocalNativeModules = "jxparam_allowLocalNativeModules";
 
     const sidJXcoreMinimumPortNumber = "jx_app_min_port";
     const sidJXcoreMaximumPortNumber = "jx_app_max_port";
@@ -190,6 +190,58 @@ class Common
     }
 
 
+    public static function saveConfig($path = null) {
+
+        if (!$path) $path = self::$jxpath;
+
+        if (file_exists($path)) {
+            $dir = dirname($path) . "/";
+
+            $cfg = '{
+                       "monitor" :
+                       {
+                           "log_path" : "' . $dir . 'jx_monitor_[WEEKOFYEAR]_[YEAR].log",
+                           "users": [ "psaadm" ]
+                       },
+                       "globalModulePath" : "' . self::$dirNativeModules . '",
+                       "globalApplicationConfigPath" : "' . self::$dirAppsConfigs . '",
+                       "npmjxPath" : "' . dirname(self::$jxpath) . '"';
+                     '}';
+
+
+            $params = [
+                Common::sidDomainJXcoreAppMaxCPULimit,
+                Common::sidDomainJXcoreAppMaxCPUInterval,
+                Common::sidDomainJXcoreAppMaxMemLimit,
+                Common::sidDomainJXcoreAppAllowCustomSocketPort,
+                Common::sidDomainJXcoreAppAllowSysExec,
+                Common::sidDomainJXcoreAppAllowLocalNativeModules
+            ];
+
+            foreach ($params as $param) {
+                $val = pm_Settings::get($param);
+                if ($val) {
+                    $sid = str_replace("jxparam_", "", $param);
+                    $cfg .= ",\n" . '"'. $sid.'" : ' . $val;
+                }
+            }
+
+            /*
+            "maxMemory" : null,
+                       "maxCPU" : 100,
+                       "allowCustomSocketPort" : true,
+                       "allowSysExec" : true,
+                       "allowLocalNativeModules" : true,
+             */
+
+            $cfg .= '}';
+
+            //self::$status->addMessage("warning", "saving cfg: " . $cfg);
+
+            file_put_contents($dir . "jx.config", $cfg);
+        }
+    }
+
     public static function setJXdata($version, $path)
     {
         // globalModulePath: string
@@ -203,32 +255,8 @@ class Common
         // allowSysExec: bool
         // allowLocalNativeModules: bool
 
+        self::saveConfig($path);
 
-        if (file_exists($path)) {
-            $dir = dirname($path) . "/";
-
-            $cfg = '{
-                       "monitor" :
-                       {
-                           "log_path" : "' . $dir . 'jx_monitor_[WEEKOFYEAR]_[YEAR].log",
-                           "users": [ "psaadm" ]
-                       },
-                       "globalModulePath" : "' . self::$dirNativeModules . '",
-                       "globalApplicationConfigPath" : "' . self::$dirAppsConfigs . '",
-                       "npmjxPath" : "' . dirname(self::$jxpath) . '"
-                     }';
-
-
-            /*
-            "maxMemory" : null,
-                       "maxCPU" : 100,
-                       "allowCustomSocketPort" : true,
-                       "allowSysExec" : true,
-                       "allowLocalNativeModules" : true,
-             */
-
-            file_put_contents($dir . "jx.config", $cfg);
-        }
 
         pm_Settings::set(self::sidJXversion, $version);
         pm_Settings::set(self::sidJXpath, $path);
@@ -943,8 +971,14 @@ class DomainInfo
         return pm_Settings::get($sid . $this->id);
     }
 
+    public function wasSet($sid) {
+        return pm_Settings::get($sid . $this->id . "isset") == "true";
+    }
+
+
     public function set($sid, $value) {
-        return pm_Settings::set($sid . $this->id, $value);
+        pm_Settings::set($sid . $this->id, $value);
+        pm_Settings::set($sid . $this->id . "isset", "true");
     }
 
     public function isAppRunning($json = null)
@@ -1237,5 +1271,190 @@ class PanelClient
 
 
 class JXconfig {
+
+    public $portTCP = 0; // int
+    public $portTCPS = 0; // int
+
+    public $globalModulePath = null; // string
+    public $globalApplicationConfigPath = null; //string
+
+    // accessible by admin:
+
+//    public $maxMemory: long kB
+    // maxCPU: int
+    // allowCustomSocketPort: bool
+    // allowSysExec: bool
+    // allowLocalNativeModules: bool
+
+    public static function getGlobal() {
+        $fname = dirname(Common::$jxpath) . "/jx.config";
+        if (file_exists($fname)) {
+            $json = file_get_contents($fname);
+        }
+    }
+
+
+    private static function check(&$form, $sid, $domainId) {
+
+        return "";
+
+        if (!$domainId) return;
+
+        $domain = Common::getDomain($domainId);
+        $vald = $domain->get($sid);
+        $valg = pm_Settings::get($sid);
+
+        if (!$vald && $valg) {
+
+
+            if (!$form && $valg == 1) $valg = "'true'";
+            $ret = "The value $valg from global config will be used.";
+
+            if ($form) {
+                $form->addElement('simpleText', "{$sid}tmp", array(
+                    'label' => '',
+                    'escape' => false,
+                    'value' => "<span style='color: green;'>$ret</span>",
+                    'description' => ""
+                ));
+
+                Common::addHR($form);
+            }
+
+            return $ret;
+//            return "<span style='color: green;'>$ret</span>";
+        }
+        return "";
+    }
+
+
+    private static function get($sid, $domainId = "") {
+
+        if ($domainId) {
+            $domain = Common::getDomain($domainId);
+            $vald = $domain->get($sid);
+            $valg = pm_Settings::get($sid);
+
+            $wasSet = $domain->wasSet($sid);
+
+            if (!$wasSet && $valg) {
+                return $valg;
+            } else {
+                return $vald;
+            }
+        } else {
+            return pm_Settings::get($sid . $domainId);
+        }
+
+    }
+
+    public static function addConfigToForm(&$form, $domainId = "") {
+        // portTCP: int
+        // portTCPS: int
+        // globalModulePath: string
+        // globalApplicationConfigPath
+
+        // accessible by admin:
+
+        // maxMemory: long kB
+        // maxCPU: int
+        // allowCustomSocketPort: bool
+        // allowSysExec: bool
+        // allowLocalNativeModules: bool
+
+        $canEdit = Common::$isAdmin;
+//        if (!Common::$isAdmin) {
+//            return;
+//        }
+
+        Common::addHR($form);
+
+        $type = $canEdit ? 'text' : 'simpleText';
+        $typeChk = $canEdit ? 'checkbox' : 'simpleText';
+        $tmpID = 0;
+
+        $val = self::get(Common::sidDomainJXcoreAppMaxMemLimit, $domainId);
+        $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxMemLimit : ("field" . ($tmpID++)) , array(
+            'label' => 'Maximum memory limit',
+            'value' => $canEdit ? $val : ($val ? "$val kB" : "disabled"),
+            'required' => false,
+            'validators' => array(
+                'Int',
+            ),
+            'description' => 'Maximum size of memory (kB), which can be allocated by the application. Value 0 disables the limit.',
+            'escape' => false
+        ));
+        self::check($form, Common::sidDomainJXcoreAppMaxMemLimit, $domainId);
+
+        $val = self::get(Common::sidDomainJXcoreAppMaxCPULimit, $domainId);
+        $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxCPULimit : ("field" . ($tmpID++)), array(
+            'label' => 'Max CPU',
+            'value' => $canEdit ? $val : ($val ? "$val %" : "disabled"),
+            'required' => false,
+            'validators' => array(
+                'Int',
+                //array("GreaterThan", true, array('min' => 0))),
+                //array("Between", true, array('min' => 1, 'max' => 100))
+            ),
+            'description' => 'Maximum CPU usage (percentage) allowed for the application. Value 0 disables the limit.',
+            'escape' => false
+        ));
+        self::check($form, Common::sidDomainJXcoreAppMaxCPULimit, $domainId);
+
+        $val = self::get(Common::sidDomainJXcoreAppMaxCPUInterval, $domainId);
+        $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxCPUInterval : ("field" . ($tmpID++)), array(
+            'label' => 'CPU check interval',
+            'value' => $canEdit ? $val : ($val ? "$val seconds" : "default"),
+            'required' => false,
+            'validators' => array(
+                'Int', //, array("Between", true, array('min' => 1, 'max' => 100))
+                array("GreaterThan", true, array('min' => 0))
+            ),
+            'description' => 'Interval (seconds) of Max CPU usage check. Default value is 2.',
+            'escape' => false
+        ));
+        self::check($form, Common::sidDomainJXcoreAppMaxCPUInterval, $domainId);
+
+        $fake = null;
+        $val = self::get(Common::sidDomainJXcoreAppAllowCustomSocketPort, $domainId);
+        $def = self::check($fake, Common::sidDomainJXcoreAppAllowCustomSocketPort, $domainId);
+        $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowCustomSocketPort : ("field" . ($tmpID++)), array(
+            'label' => 'Allow custom socket port' ,
+            'description' => "$def",
+            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow"),
+            "escape" => false
+        ));
+
+
+        $val = self::get(Common::sidDomainJXcoreAppAllowSysExec, $domainId);
+        $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowSysExec : ("field" . ($tmpID++)), array(
+            'label' => 'Allow to spawn/exec child processes',
+            'description' => self::check($fake, Common::sidDomainJXcoreAppAllowSysExec, $domainId),
+            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
+        ));
+
+        $val = self::get(Common::sidDomainJXcoreAppAllowLocalNativeModules, $domainId);
+        $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowLocalNativeModules : ("field" . ($tmpID++)), array(
+            'label' => 'Allow to call local native modules',
+            'description' => self::check($fake, Common::sidDomainJXcoreAppAllowLocalNativeModules, $domainId),
+            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
+        ));
+
+
+        if ($domainId) {
+
+            Common::addHR($form);
+
+            $domain = Common::getDomain($domainId);
+
+            $val = $domain->getAppLogWebAccess();
+            $form->addElement($typeChk, $canEdit ? Common::sidDomainAppLogWebAccess : ("field" . ($tmpID++)), array(
+                'label' => 'Application\'s log web access',
+                'description' => "Will be available on http://" . $domain->name . "/" . basename($domain->appLogDir),
+                'value' => $canEdit ? $val : ($val === "1" ? "Enabled" : "Disabled")
+            ));
+        }
+
+    }
 
 }

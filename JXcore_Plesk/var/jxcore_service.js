@@ -32,8 +32,10 @@ var srv = http.createServer(function (req, res) {
 
             res.writeHead(200, {'Content-Type': 'text/plain'});
             res.end(answer);
+            return;
+        }
 
-        } else if (parsed.query.nginx) {
+        if (parsed.query.nginx) {
             if (parsed.query.nginx == "reload") {
                 var cmd = "/etc/init.d/nginx reload";
 
@@ -44,7 +46,11 @@ var srv = http.createServer(function (req, res) {
                 res.writeHead(200, {'Content-Type': 'text/plain'});
                 res.end(answer);
             }
+            return;
         }
+
+
+
     }
 });
 

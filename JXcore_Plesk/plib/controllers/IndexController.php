@@ -303,10 +303,12 @@ class IndexController extends pm_Controller_Action
                 ));
 
 
+                JXconfig::addConfigToForm($form);
+
                 $form->addElement('simpleText', "restartmayoccur", array(
                     'label' => '',
                     'escape' => false,
-                    'value' => "<span style='color: red;'>Changing the ports range may result in restarting of all the applications.</span>",
+                    'value' => "<span style='color: red;'>Submitting the form will may result in restarting the monitor together with all of the applications.</span>",
                     'description' => ""
                 ));
 
@@ -326,7 +328,20 @@ class IndexController extends pm_Controller_Action
                     $this->JXcoreInstallUninstall($req->getParam($sidJXcore));
                 } else {
 //                    $params = [Common::sidMonitorEnabled, Common::sidJXcoreMinimumPortNumber, Common::sidJXcoreMaximumPortNumber];
-                    $params = [Common::sidJXcoreMinimumPortNumber, Common::sidJXcoreMaximumPortNumber];
+                    $params = [Common::sidJXcoreMinimumPortNumber, Common::sidJXcoreMaximumPortNumber,
+
+//                        Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess,
+
+                        Common::sidDomainJXcoreAppMaxCPULimit,
+                        Common::sidDomainJXcoreAppMaxCPUInterval,
+                        Common::sidDomainJXcoreAppMaxMemLimit,
+                        Common::sidDomainJXcoreAppAllowCustomSocketPort,
+                        Common::sidDomainJXcoreAppAllowSysExec,
+                        Common::sidDomainJXcoreAppAllowLocalNativeModules
+                        //  Common::sidDomainJXcoreAppAllowSpawnChild
+                    ];
+
+
                     $portsChanged = false;
                     foreach ($params as $param) {
                         if (pm_Settings::get($param) !== $form->getValue($param)) $portsChanged = true;
@@ -337,10 +352,13 @@ class IndexController extends pm_Controller_Action
                     Common::refreshValues();
 
                     if ($portsChanged) {
-//                        $this->_status->addMessage("info", "Port range has changed. Monitor will be restarting.");
+//                        $this->_status->addMessage("info", "Port range has changed. Monitro will restart.");
+                        Common::saveConfig();
                         Common::reassignPorts();
-                        $this->monitorStartStop("stop");
-                        $this->monitorStartStop("start");
+                        if ($monitorRunning) {
+                            $this->monitorStartStop("stop");
+                            $this->monitorStartStop("start");
+                        }
                     }
                     $this->_status->addMessage('info', 'Data was successfully saved.');
                 }

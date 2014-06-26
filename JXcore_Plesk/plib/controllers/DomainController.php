@@ -151,7 +151,7 @@ class DomainController extends pm_Controller_Action
             ));
         }
 
-        self::addConfigToForm($form, $canEdit);
+        JXconfig::addConfigToForm($form, $this->ID);
 
 //        Common::addHR($form);
 //
@@ -246,9 +246,15 @@ class DomainController extends pm_Controller_Action
 
             $changed = false;
             foreach ($params as $param) {
-                if (pm_Settings::get($param . $this->ID) !== $form->getValue($param))
+                $val = $form->getValue($param);
+//                $this->_status->addMessage('warning', "val of $param = $val.");
+
+                if (pm_Settings::get($param . $this->ID) !== $form->getValue($param)) {
                     $changed = true;
-                pm_Settings::set($param . $this->ID, $form->getValue($param));
+                }
+//                pm_Settings::set($param . $this->ID, $form->getValue($param));
+
+                $this->domain->set($param, $val);
 //                    $this->_status->addMessage("info", "$param = " . $form->getValue($param));
             }
             $this->_status->addMessage('info', 'Data was successfully saved.');
@@ -280,103 +286,7 @@ class DomainController extends pm_Controller_Action
     }
 
 
-    private function addConfigToForm(&$form, $canEdit = null) {
-        // portTCP: int
-        // portTCPS: int
-        // globalModulePath: string
-        // globalApplicationConfigPath
 
-        // accessible by admin:
-
-        // maxMemory: long kB
-        // maxCPU: int
-        // allowCustomSocketPort: bool
-        // allowSysExec: bool
-        // allowLocalNativeModules: bool
-
-        $canEdit = Common::$isAdmin;
-//        if (!Common::$isAdmin) {
-//            return;
-//        }
-
-        Common::addHR($form);
-
-        $type = $canEdit ? 'text' : 'simpleText';
-        $typeChk = $canEdit ? 'checkbox' : 'simpleText';
-        $tmpID = 0;
-
-        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxMemLimit . $this->ID);
-        $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxMemLimit : ("field" . ($tmpID++)) , array(
-            'label' => 'Maximum memory limit',
-            'value' => $canEdit ? $val : ($val ? "$val kB" : "disabled"),
-            'required' => false,
-            'validators' => array(
-                'Int',
-            ),
-            'description' => 'Maximum size of memory (kB), which can be allocated by the application. Value 0 disables the limit.',
-            'escape' => false
-        ));
-
-        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxCPULimit . $this->ID);
-        $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxCPULimit : ("field" . ($tmpID++)), array(
-            'label' => 'Max CPU',
-            'value' => $canEdit ? $val : ($val ? "$val %" : "disabled"),
-            'required' => false,
-            'validators' => array(
-                'Int',
-                //array("GreaterThan", true, array('min' => 0))),
-                //array("Between", true, array('min' => 1, 'max' => 100))
-            ),
-            'description' => 'Maximum CPU usage (percentage) allowed for the application. Value 0 disables the limit.',
-            'escape' => false
-        ));
-
-
-        $val = pm_Settings::get(Common::sidDomainJXcoreAppMaxCPUInterval . $this->ID);
-        $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxCPUInterval : ("field" . ($tmpID++)), array(
-            'label' => 'CPU check interval',
-            'value' => $canEdit ? $val : ($val ? "$val seconds" : "default"),
-            'required' => false,
-            'validators' => array(
-                'Int', //, array("Between", true, array('min' => 1, 'max' => 100))
-                array("GreaterThan", true, array('min' => 0))
-            ),
-            'description' => 'Interval (seconds) of Max CPU usage check. Default value is 2.',
-            'escape' => false
-        ));
-
-
-
-        $val = pm_Settings::get(Common::sidDomainJXcoreAppAllowCustomSocketPort . $this->ID);
-        $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowCustomSocketPort : ("field" . ($tmpID++)), array(
-            'label' => 'Allow custom socket port',
-            'description' => "",
-            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
-        ));
-
-        $val = pm_Settings::get(Common::sidDomainJXcoreAppAllowSysExec . $this->ID);
-        $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowSysExec : ("field" . ($tmpID++)), array(
-            'label' => 'Allow to spawn/exec child processes',
-            'description' => "",
-            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
-        ));
-
-        $val = pm_Settings::get(Common::sidDomainJXcoreAppAllowLocalNativeModules . $this->ID);
-        $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowLocalNativeModules : ("field" . ($tmpID++)), array(
-            'label' => 'Allow to call local native modules',
-            'description' => "",
-            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
-        ));
-
-        Common::addHR($form);
-
-        $val = $this->domain->getAppLogWebAccess();
-        $form->addElement($typeChk, $canEdit ? Common::sidDomainAppLogWebAccess : ("field" . ($tmpID++)), array(
-            'label' => 'Application\'s log web access',
-            'description' => "Will be available from http://" . $this->domain->name . "/" . basename($this->domain->appLogDir) . "/index.txt",
-            'value' => $canEdit ? $val : ($val === "1" ? "Enabled" : "Disabled")
-        ));
-    }
 
 
     public function logAction()
