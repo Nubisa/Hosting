@@ -1450,7 +1450,7 @@ class JXconfig {
             $val = $domain->getAppLogWebAccess();
             $form->addElement($typeChk, $canEdit ? Common::sidDomainAppLogWebAccess : ("field" . ($tmpID++)), array(
                 'label' => 'Application\'s log web access',
-                'description' => "Will be available on http://" . $domain->name . "/" . basename($domain->appLogDir),
+                'description' => "Will be available on http://" . $domain->name . "/" . basename($domain->appLogDir) . "/index.txt",
                 'value' => $canEdit ? $val : ($val === "1" ? "Enabled" : "Disabled")
             ));
         }

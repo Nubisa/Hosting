@@ -4,8 +4,8 @@
   <name>JXcore Node.JS</name>
   <description>This extension adds JXcore Node.JS support into Parallel's Plesk Control Panel.
   </description>
-  <version>2</version>
-  <release>1</release>
+  <version>0.1.5</version>
+  <release>0.1.5</release>
   <vendor>Nubisa, Inc.</vendor>
   <plesk_min_version>11.0.1</plesk_min_version>
 </module>
