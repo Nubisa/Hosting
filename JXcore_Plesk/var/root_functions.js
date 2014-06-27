@@ -19,20 +19,26 @@ exports.watch = function (dir, appLogDir, cb) {
 
         if (changed) return;
 
+        var fullPath = path.join(dir, "/", file);
+
         // skip files starting with "." (like .htaccess)
         if (file.slice(0, 1) === ".") return;
         // skip log files
         var d1 = path.normalize(dir + "/");
         var d2 = path.normalize(appLogDir + "/");
 //        console.log("dir",d1, "appLogDir", d2);
-        if (d1.slice(0, d2.length) === d2) return;
+        if (d1.slice(0, d2.length) === d2) {
+            if (cb && file.indexOf("clearlog.txt") != -1 && fs.existsSync(path.normalize(dir ,fullPath))) {
+                cb({ clearlog: true, dir: dir, file : file });
+            }
+            return;
+        }
 
         changed = true;
 
-
         if (cb) {
             setTimeout(function () {
-                cb(path.join(dir, "/", file));
+                cb({ path: fullPath });
                 changed = false;
             }, 500);
         }
@@ -45,7 +51,7 @@ exports.watch = function (dir, appLogDir, cb) {
  * Reads jx.config file located at jx folder.
  * @returns {*} Returns json object or null
  */
-exports.readJXconfig = function() {
+exports.readJXconfig = function () {
     var dir = path.dirname(process.execPath);
     var configFile = path.join(dir, "/", "jx.config");
 //        log("main cfg file: " + configFile);
@@ -56,9 +62,28 @@ exports.readJXconfig = function() {
             var str = fs.readFileSync(configFile);
             var json = JSON.parse(str);
             return json;
-        } catch(ex) {
+        } catch (ex) {
 //            log("Cannot read or parse jx.config: " + ex, true);
             return null;
         }
     }
+};
+
+
+/**
+ * Removes folder recursively
+ * @param fullDir
+ * @returns {boolean} True, if operation succeeded. False otherwise.
+ */
+exports.rmdirSync = function (fullDir) {
+
+    fullDir = path.normalize(fullDir);
+    if (!fs.existsSync(fullDir)) {
+        return;
+    }
+
+    var cmd = process.platform === 'win32' ? "rmdir /s /q " : "rm -rf ";
+    jxcore.utils.cmdSync(cmd + fullDir);
+
+    return !fs.existsSync(fullDir);
 };

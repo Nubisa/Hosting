@@ -20,7 +20,7 @@ var log = function (str, error) {
     if (!logPath) return;
 
     //if (isRoot) {
-        fs.appendFileSync(logPath, str + os.EOL);
+    fs.appendFileSync(logPath, str + os.EOL);
     //} //else {
 //        console.log(str);
     //}
@@ -43,7 +43,6 @@ if (!logPath) {
     process.exit(7);
 }
 var logPathDir = path.dirname(logPath);
-
 
 
 //console.log("logPath", logPath);
@@ -105,13 +104,14 @@ if (!isRoot || !respawned) {
 
     }, function (delay) {
         //log("Subscribing is delayed by " + delay+ " ms.");
-        setTimeout(function () {}, delay + 5000);
+        setTimeout(function () {
+        }, delay + 5000);
     });
 
 } else {
 
     var out = 'ignore';
-    var err = 'ignore';
+//    var err = 'ignore';
 
     if (logPath) {
         if (!fs.existsSync(logPathDir)) {
@@ -134,7 +134,8 @@ if (!isRoot || !respawned) {
 
         try {
             out = fs.openSync(logPath, 'a');
-            err = fs.openSync(logPath, 'a');
+//            err = fs.openSync(logPath, 'a');
+
         } catch (ex) {
             // logging will no be possible, but app can still run
         }
@@ -175,7 +176,7 @@ if (!isRoot || !respawned) {
                 log("Cannot reload nginx config: " + ret.out);
             }
 //            log("return from nginx reload: " + JSON.stringify(ret));
-        } catch(ex) {
+        } catch (ex) {
             log("Cannot save nginx conf file: " + ex);
         }
     }
@@ -209,7 +210,7 @@ if (!isRoot || !respawned) {
     // and if file does not exists, fileWatcher fill check for this
     if (fs.existsSync(file)) {
         var spawn = require('child_process').spawn;
-        var child = spawn(process.execPath, [file], { uid: uid, stdio: [ 'ignore', out, err ], cwd : path.dirname(file)});
+        var child = spawn(process.execPath, [file], { uid: uid, stdio: [ 'ignore', out, out ], cwd: path.dirname(file)});
 
         child.on('error', function (err) {
             if (err.toString().trim().length) {
@@ -238,37 +239,49 @@ if (!isRoot || !respawned) {
                 log("Cannot delete config file: " + ex);
             }
 
-            root_functions.watch( path.dirname(file), logPathDir, function(fname) {
+            root_functions.watch(path.dirname(file), logPathDir, function (param) {
 
-//                log("CHANGED!!! " + fname + ", file = " + file);
-                var restart = false;
-                if (fname == file) {
-                    // app itself was changed
-                    if (!fs.existsSync(fname)) {
-                        // lets kill the child
-
-                        try {
-                            if (child) {
-                                exitting = true;
-                                process.kill(child.pid);
-                                child = null;
-                                exitting = false;
-                            }
-                        } catch (ex) {
-                        }
-                    } else {
-                        // child was killed previously, so lets restart the app
-                        restart = true;
+                if (param.clearlog && out && out != "ignore" ) {
+                    fs.ftruncateSync(out, 0);
+//                    log("clearing the log!: " + JSON.stringify(param) );
+                    try {
+                        fs.unlinkSync(path.join(param.dir, "/", param.file));
+                    } catch (ex) {
                     }
-                } else {
-                    restart = true;
                 }
 
-                if (restart) {
-                    log("Files changed - restarting the application.");
-    //                var ret = jxcore.utils.cmdSync('"' + process.execPath + "' monitor kill " + __filename);
-    //                log('"' + process.execPath + "' monitor kill " + __filename + " : " + JSON.stringify(ret));
-                    process.exit(77);
+//                log("CHANGED!!! " + fname + ", file = " + file);
+
+                if (param.fname) {
+                    var restart = false;
+                    if (fname == file) {
+                        // app itself was changed
+                        if (!fs.existsSync(fname)) {
+                            // lets kill the child
+
+                            try {
+                                if (child) {
+                                    exitting = true;
+                                    process.kill(child.pid);
+                                    child = null;
+                                    exitting = false;
+                                }
+                            } catch (ex) {
+                            }
+                        } else {
+                            // child was killed previously, so lets restart the app
+                            restart = true;
+                        }
+                    } else {
+                        restart = true;
+                    }
+
+                    if (restart) {
+                        log("Files changed - restarting the application.");
+                        //                var ret = jxcore.utils.cmdSync('"' + process.execPath + "' monitor kill " + __filename);
+                        //                log('"' + process.execPath + "' monitor kill " + __filename + " : " + JSON.stringify(ret));
+                        process.exit(77);
+                    }
                 }
             });
 

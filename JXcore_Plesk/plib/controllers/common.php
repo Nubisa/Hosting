@@ -1,5 +1,34 @@
 <?php
 
+/*
+ * todo:
+ * when uploading and app file, after forced exception - it does not restart
+ *
+ * domain config panel:
+ *      on textboxes, when user clears the textbox - display info about global value used
+ *
+ * on uninstall:
+ *      removing nginx configs for jxcore + reload nginx
+ *      cleaning .htaccess for each domain
+ *      removing jxcore_logs folder for each domain
+ *
+ *
+ *
+ * known issues:
+ *      - when extension is uninstalled, and we upload some files to folders, where extension generally resides:
+ *      1. /opt/psa/var/modules/jxcore_support/
+ *      2. /opt/psa/admin/plib/modules/jxcore_support/
+ *      then installimng an extension may fail with:
+ *      Error: Unable to install the extension: filemng failed: filemng: Error occurred during /bin/cp command.
+ *
+ *
+ * useful commands:
+ *      - fix plesk config:
+ *          /usr/local/psa/bin/repair -r
+ *      - reload nginx config:
+ *          /etc/init.d/nginx reload
+ */
+
 
 class Common
 {
@@ -11,6 +40,7 @@ class Common
 
     public static $urlJXcoreConfig = "";
     public static $urlJXcoreModules = "";
+    public static $urlJXcoreMonitorLog = "";
     public static $urlDomainConfig = "";
     public static $urlDomainAppLog = "";
 
@@ -135,7 +165,8 @@ class Common
 //        self::$urlMonitor = "http://localhost:17777/json";
         self::$urlMonitorLog = "http://localhost:17777/logs";
         self::$urlJXcoreConfig = $baseUrl . "index.php/index/jxcore";
-        self::$urlJXcoreModules = $baseUrl . "index.php/index/modules";
+        self::$urlJXcoreModules = $baseUrl . "index.php/index/listmodules";
+        self::$urlJXcoreMonitorLog = $baseUrl . "index.php/index/log";
         self::$urlDomainConfig = $baseUrl . "index.php/domain/config";
         self::$urlDomainAppLog = $baseUrl . "index.php/domain/log";
 
@@ -521,9 +552,14 @@ class Common
                         }
 
                         $cmd = Common::$jxpath . " monitor kill {$spawner} 2>&1";
-//                        $cmd = $domain->getSpawnerExitCommand(true);
-                        $msg = " Cannot stop the application: ";
-//                        $sleep += 2; // wait little longer for monitor to respawn an app
+                        @exec($cmd, $out, $ret);
+                        // cannot rely on exitcode, so checking the monitor
+
+                        Common::getURL(Common::$urlMonitor, $json);
+                        $appRunning = strpos($json, $path) !== false;
+                        if ($appRunning) {
+                            self::$status->addMessage("error", "Cannot stop the application. ". join("\n", $out) . ". Exit code: $ret");
+                        }
                     } else if ($enabled && !$appRunning) {
                         // starting application
                         if (!$monitorRunning) {
@@ -533,26 +569,19 @@ class Common
                         } else {
                             // leave $cmd intact - it will start the application
                             // but enable proxy if its not enabled
-                            self::enableHttpProxy();
+                            self::enableServices();
+
+                            @exec($cmd, $out, $ret);
+                            // cannot rely on exitcode, so checking the monitor
+
+                            Common::getURL(Common::$urlMonitor, $json);
+                            $appRunning = strpos($json, $path) !== false;
+                            self::$status->addMessage($appRunning ? "info" : "error", $appRunning ? "The application successfully started." : "The application could not be started.");
+                            $cmd = null;
+                            sleep($sleep);
                         }
                     } else {
                         $cmd = null;
-                    }
-
-                    if ($cmd) {
-                        @exec($cmd, $out, $ret);
-                        if ($ret && $ret != 77) {
-                            //self::$status->addMessage($ret ? "error" : "info", $msg . join("\n", $out) . ". Exit code: $ret");
-                        } else {
-                            if ($enabled && $monitorRunning) {
-                                Common::getURL(Common::$urlMonitor, $json);
-                                $appRunning = strpos($json, $path) !== false;
-                                self::$status->addMessage($appRunning ? "info" : "error", $appRunning ? "The application successfully started." : "The application could not be started.");
-                            }
-                        }
-
-                        // let the monitor respawn app as root
-                        sleep($sleep);
                     }
                 }
             }
@@ -677,7 +706,7 @@ class Common
 
                 //self::$status->addMessage("info", "timestamp = $timestamp, now = $now, diff = $diff");
                 $txt = "";
-                if ($action == 'start') $txt = "Completing the operation..";
+                if ($action == 'start') $txt = "Completing the operation...";
                 if ($action == 'stop') $txt = "Monitor should be stopped in approx {$diff} seconds.";
 
                 $str = "$txt Page will be reloaded in <span id='jx_refresh_count' name='jx_refresh_count'>5</span> seconds." . $refresh;
@@ -848,7 +877,13 @@ class Common
         return join("\n", $arr);
     }
 
-    public static function enableHttpProxy() {
+
+    public static function enableServices() {
+        self::enableHttpProxy();
+        self::enableNginx();
+    }
+
+    private static function enableHttpProxy() {
         //return;
 
         $cmd1 = "/opt/psa/admin/bin/httpd_modules_ctl -s";
@@ -883,6 +918,48 @@ class Common
     }
 
 
+    private static function enableNginx() {
+        //return;
+
+        self::callService("nginx", "start", null, "Nginx could not be enabled.");
+        return;
+
+//        $cmd1 = "/opt/psa/admin/bin/nginxmng -s";
+////        $cmd2 = "/opt/psa/admin/bin/apache_control_adapter --restart";
+//        $cmd2 = "/opt/psa/admin/bin/nginxmng -e";
+//
+////        $before = shell_exec($cmd1);
+//
+//        $out = null;
+//        $ret = null;
+//        @exec($cmd1, $out, $ret);
+//        if (!$ret) {
+//            // checks proxy_http status
+//            $out = trim($out);
+//            $isOn = $out == "Enabled";
+//            $isOff = $out == "Disabled";
+//
+//            self::$status->addMessage("error", "out: " . join(",", $out) . " isOn: $isOn, isOff: $isOff");
+//
+//            if ($isOff){
+//                @exec($cmd2, $out, $ret);
+//                if (!$ret) {
+//                    $ret = shell_exec($cmd1);
+//                    $isOn = $out == "Enabled";
+//                    if (!$isOn) {
+//                        self::$status->addMessage("error", "Nginx could not be enabled.");
+//                    }
+//                } else {
+//                    self::$status->addMessage("error", "Cannot enable nginx.");
+//                }
+//            }
+//        } else {
+//            self::$status->addMessage("error", "Cannot fetch nginx status");
+//        }
+    }
+
+
+
     /**
      * Calls JXcore service process for running a command as root
      * @param $sid
@@ -891,7 +968,7 @@ class Common
      * @param string $msgErr
      * @return bool
      */
-    public static function callService($sid, $arg, $msgOK = null, $msgErr = null) {
+    public static function callService($sid, $arg, $msgOK = null, $msgErr = null, $return = null) {
 
         $url = Common::$urlService . "cmd?{$sid}={$arg}";
 
@@ -904,7 +981,7 @@ class Common
             $msg = str_replace("#sid#", $sid, $msg);
             self::$status->addMessage($ok ?  "info": "error", $msg);
         }
-        return $ok;
+        return $return && $ret ? $out : $ok;
     }
 
 }
@@ -1199,13 +1276,22 @@ class DomainInfo
     public function clearLogFile()
     {
         if (file_exists($this->appLogPath)) {
+            $oldSize = filesize($this->appLogPath);
+
+
+            $clearlog = $this->appLogDir . "clearlog.txt";
+            $rel = str_replace($this->fileManager->getFilePath("."), "", $clearlog);
+            $this->fileManager->filePutContents($rel, "clear");
+
+
+//            file_put_contents($clearlog, "");
+            sleep(1);
 //            $fh = fopen($this->appLogPath, 'w' );
 //            fclose($fh);
-            $rel = str_replace($this->fileManager->getFilePath("."), "", $this->appLogPath);
-            $this->fileManager->filePutContents($rel, "");
+
             $newSize = filesize($this->appLogPath);
 
-            return $newSize === 0;
+            return $newSize < $oldSize;
         }
         return true;
     }
@@ -1459,6 +1545,104 @@ class JXconfig {
             ));
         }
 
+    }
+
+}
+
+
+class LogForm {
+
+    public static function getForm($controller, $helper, $status, $logPath, $domainId = "")
+    {
+        if (!$domainId) $domainId = "";
+        if ($logPath == "monitor")
+
+        $form = new pm_Form_Simple();
+        $sidClearLog = "clear_log";
+        $sidLastLinesCount = "last_lines_count";
+
+        $form->addElement('hidden', $sidClearLog, array(
+            'value' => "nothing"
+        ));
+
+        $form->addElement('simpleText', "size", array(
+            'label' => 'Log file size',
+            'value' => filesize($logPath) . " bytes" . Common::getSimpleButton($sidClearLog, "Clear log", "clear", Common::iconUrlDelete, null),
+            'escape' => false
+        ));
+
+        $val = pm_Settings::get($sidLastLinesCount . $domainId);
+        if (!$val && $val !=0) $val = 200;
+        $form->addElement('text', $sidLastLinesCount, array(
+            'label' => 'Show last # lines',
+            'value' => $val,
+            'required' => false,
+            'validators' => array(
+                'Int',
+            ),
+            'description' => 'Displays only last # lines of the log file. Enter 0 to display the whole log.',
+            'escape' => false
+        ));
+
+        $form->addControlButtons(array(
+            'cancelLink' => null,
+            'hideLegend' => true
+        ));
+
+        if ($controller->getRequest()->isPost() && $form->isValid($controller->getRequest()->getPost())) {
+            $actionClearValue = $controller->getRequest()->getParam($sidClearLog);
+            $actionClearPressed = $actionClearValue === "clear";
+
+            $val = $form->getValue($sidLastLinesCount);
+
+            if ($actionClearPressed) {
+
+                if ($domainId && ctype_digit($domainId)) {
+                    $domain = Common::getDomain($domainId);
+                    $ret = $domain->clearLogFile();
+                    if ($ret === false) {
+                        $status->addMessage('error', 'Could not clear the log file.');
+                    } else {
+                        $status->addMessage('info', 'Log cleared.');
+                    }
+
+                } else {
+                    Common::callService("delete", "monitorlogs", "Log cleared.", "Problem: ");
+                }
+
+            } else {
+                pm_Settings::set($sidLastLinesCount . $domainId, $val);
+            }
+            $helper->json(array('redirect' => Common::$urlDomainAppLog));
+        }
+
+        //$this->readLog($val);
+        $controller->view->log = self::readLog($logPath, $val);
+
+        $controller->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
+        $controller->view->form = $form;
+    }
+
+
+    private static function readLog($logPath, $tail)
+    {
+        // $this->_status->addMessage("info", "last lines " . $tail);
+        if (file_exists($logPath)) {
+            if (!ctype_digit($tail) || $tail == 0) {
+                $contents = file_get_contents($logPath);
+                $contents = str_replace("\n", "<br>", $contents);
+            } else {
+                $file = file($logPath);
+                $contents = implode("<br>", array_slice($file, -$tail));
+            }
+        } else {
+            $contents = "No log file. " . $logPath;
+        }
+
+        if (trim($contents) === "") {
+            $contents = "The log file is empty.";
+        }
+        return $contents;
     }
 
 }

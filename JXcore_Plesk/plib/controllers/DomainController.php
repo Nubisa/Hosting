@@ -295,6 +295,8 @@ class DomainController extends pm_Controller_Action
 
     public function logAction()
     {
+        //LogForm::getForm($this, $this->_helper, $this->_status, $this->domain->appLogPath, $this->ID);return;
+
         $form = new pm_Form_Simple();
         $sidClearLog = "clear_log";
         $sidLastLinesCount = "last_lines_count";
@@ -351,6 +353,7 @@ class DomainController extends pm_Controller_Action
         $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
         $this->view->form = $form;
     }
+
 
     private function readLog($tail)
     {

@@ -27,7 +27,7 @@ class IndexController extends pm_Controller_Action
                 ),
                 array(
                     'title' => 'NPM Modules',
-                    'action' => 'modules',
+                    'action' => 'listmodules',
                 )
             );
 
@@ -95,9 +95,62 @@ class IndexController extends pm_Controller_Action
     {
         if ($this->redirect(true)) return;
 
-        $log = "empty";
+//        $log = "empty";
+//        Common::getURL(Common::$urlMonitorLog, $log);
+//        $this->view->log = str_replace("\n", "<br>", $log);
+
+        $form = new pm_Form_Simple();
+        $sidClearLog = "clear_log";
+        $sidLastLinesCount = "last_lines_count";
+
+        $form->addElement('hidden', $sidClearLog, array(
+            'value' => "nothing"
+        ));
+
+        $form->addElement('simpleText', "size", array(
+            'label' => 'Log file',
+            'value' => Common::getSimpleButton($sidClearLog, "Clear log", "clear", Common::iconUrlDelete, null, "margin-left: 0px;"),
+            'escape' => false
+        ));
+
+        $val = pm_Settings::get($sidLastLinesCount . "monitor");
+        if (!$val && $val !=0) $val = 200;
+        $form->addElement('text', $sidLastLinesCount, array(
+            'label' => 'Show last # lines',
+            'value' => $val,
+            'required' => false,
+            'validators' => array(
+                'Int',
+            ),
+            'description' => 'Displays only last # lines of the log file. Enter 0 to display the whole log.',
+            'escape' => false
+        ));
+
+        $form->addControlButtons(array(
+            'cancelLink' => null,
+            'hideLegend' => true
+        ));
+
+        if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
+            $actionClearValue = $this->getRequest()->getParam($sidClearLog);
+            $actionClearPressed = $actionClearValue === "clear";
+
+            $val = $form->getValue($sidLastLinesCount);
+
+            if ($actionClearPressed) {
+                Common::callService("delete", "monitorlogs", "Log cleared.", "Problem: ");
+            } else {
+                pm_Settings::set($sidLastLinesCount . "monitor", $val);
+            }
+            $this->_helper->json(array('redirect' => Common::$urlJXcoreMonitorLog));
+        }
+
+        $log = "";
         Common::getURL(Common::$urlMonitorLog, $log);
-        $this->view->log = str_replace("\n", "<br>", $log);
+        $this->view->log = implode("<br>", array_slice(explode("\n", trim($log)), -$val));
+
+        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
+        $this->view->form = $form;
     }
 
     /*
@@ -162,7 +215,7 @@ class IndexController extends pm_Controller_Action
             if (!Common::isJXValid()) {
                 $out = null;
 
-                Common::enableHttpProxy();
+                Common::enableServices();
 
                 $ok = $this->download_JXcore($out);
                 $this->_status->addMessage($ok ? 'info' : 'error', $out);
@@ -373,30 +426,23 @@ class IndexController extends pm_Controller_Action
 
 
 
-    public function modulesAction()
+    public function listmodulesAction()
     {
         if ($this->redirect(true)) return;
 
-        $node_modules = Common::$dirNativeModules . "node_modules/";
-
-        $installed_modules = [];
-        if (file_exists($node_modules)) {
-            $d = dir($node_modules);
-            while (false !== ($entry = $d->read())) {
-                if (!in_array($entry, [ '.', '..']) && is_dir($node_modules . $entry)) {
-                    $installed_modules[] = Common::getIcon(true, $entry, "");
-                }
-            }
-            $d->close();
-        }
-
         $form = new pm_Form_Simple();
 
-        $form->addElement('simpleText', "installedModules", array(
+
+        $form->addElement('hidden', "remove", array(
             'label' => 'Installed modules',
-            'value' => count($installed_modules) ? join("<br>", $installed_modules) : "None",
-            'escape' => false
+            'value' => ""
         ));
+
+//        $form->addElement('simpleText', "installedModules", array(
+//            'label' => 'Installed modules',
+//            'value' => count($installed_modules) ? join("<br>", $installed_modules) : "None",
+//            'escape' => false
+//        ));
 
         $nameToInstall = trim($this->getRequest()->getParam("names"));
         $form->addElement('text', "names", array(
@@ -417,18 +463,108 @@ class IndexController extends pm_Controller_Action
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
 
-            if ($nameToInstall != "") {
-                Common::callService("install", $nameToInstall, "Module #arg# installed", "Cannot install #arg# module.");
-            } else {
-                $this->_status->addMessage('error', 'Nothing to install.');
+            $nameToRemove = trim($this->getRequest()->getParam("remove"));
+            if ($nameToRemove) {
+                Common::callService("remove", $nameToRemove, "Module #arg# was successfully removed.", "Cannot remove #arg# module.");
+            } else
+            if ($nameToInstall) {
+                Common::callService("install", $nameToInstall, "Module #arg# was successfully installed.", "Cannot install #arg# module.");
             }
 
             $this->_helper->json(array('redirect' => Common::$urlJXcoreModules));
         }
 
+        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
         $this->view->form = $form;
+
+        $this->view->list = $this->getModulesList();
+        if ($this->view->list) {
+            $this->view->list->setDataUrl(array('action' => 'listmodules-data'));
+        }
+
         Common::check();
     }
+
+    public function listmodulesDataAction()
+    {
+        $this->listmodulesAction();
+
+        // Json data from pm_View_List_Simple
+        $this->_helper->json($this->view->list->fetchData());
+        Common::check();
+    }
+
+    private function getModulesList() {
+        $list = new pm_View_List_Simple($this->view, $this->_request);
+
+        $data = [];
+        $info = Common::callService("modules", "info", null, null, true);
+
+        $modules = explode("||", $info);
+        foreach($modules as $str) {
+            $parsed = explode("|", $str);
+            if (count($parsed) == 3) {
+                $modules[$parsed[0] . "_version"] = $parsed[1];
+                $modules[$parsed[0] . "_description"] = $parsed[2];
+            }
+        }
+
+
+        $node_modules = Common::$dirNativeModules . "node_modules/";
+//        $installed_modules = [];
+        if (file_exists($node_modules)) {
+            $d = dir($node_modules);
+            while (false !== ($entry = $d->read())) {
+                if (substr($entry, 0, 1) !== "." && is_dir($node_modules . $entry)) {
+
+                    $ver = isset($modules[$entry . "_version"]) ? $modules[$entry . "_version"] : "Cannot read version";
+                    $desc = isset($modules[$entry . "_description"]) ? $modules[$entry . "_description"] : "Cannot read description";
+
+                    $data[] = array(
+                        'column-1' => Common::iconON,
+                        'column-2' => $entry,
+                        'column-3' => $ver,
+                        'column-4' => $desc,
+                        'column-5' => Common::getSimpleButton("remove", "Remove", "$entry", Common::iconUrlDelete, null, "margin: 0px;")
+                    );
+
+                    //$installed_modules[] = '<div style="width: 120px; display: inline-block">' . Common::getIcon(true, $entry, "") . "</div>" . Common::getSimpleButton("remove", "Remove", "$entry", Common::iconUrlDelete);
+                }
+            }
+            $d->close();
+        }
+
+        $list->setData($data);
+        $columns = array(
+            'column-1' => array(
+                'title' => '',
+                'noEscape' => true,
+            ),
+            'column-2' => array(
+                'title' => 'Module name',
+                'noEscape' => true,
+            ),
+            'column-3' => array(
+                'title' => 'module version',
+                'noEscape' => true,
+            ),
+            'column-4' => array(
+                'title' => 'Description',
+                'noEscape' => true,
+            ),
+            'column-5' => array(
+                'title' => 'Manage',
+                'noEscape' => true,
+            )
+        );
+
+        $list->setColumns($columns);
+        // Take into account listDataAction corresponds to the URL /list-data/
+        $list->setDataUrl(array('action' => 'listdomains-data'));
+        return $list;
+    }
+
+
 
     private function _getDomains()
     {
