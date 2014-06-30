@@ -3,7 +3,7 @@
 var fs = require('fs');
 var path = require('path');
 
-var watch_list = {};
+var watch_list = exports.watch_list = {};
 var change_list = {};
 var listeners = {};
 
@@ -43,8 +43,7 @@ exports.on = function(name, cb){
 
 exports.watch = function(location){
     if(watch_list[location]){
-        console.log(location);
-        fs.unwatch(location);
+        exports.unwatch(location);
     }
     watch_list[location] = new watch_me(location);
 
