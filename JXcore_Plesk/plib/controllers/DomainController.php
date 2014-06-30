@@ -45,7 +45,7 @@ class DomainController extends pm_Controller_Action
         }
 
         $this->domain = Common::getDomain(intval($this->ID));
-        $this->view->breadCrumb = 'Navigation: <a href="' . Common::$urlListDomains . '">Domains</a> -> ' . $this->domain->name;
+        $this->view->breadCrumb = 'Navigation: <a href="' . Common::$urlJXcoreDomains . '">Domains</a> -> ' . $this->domain->name;
     }
 
     public function indexAction()
@@ -151,7 +151,7 @@ class DomainController extends pm_Controller_Action
             ));
         }
 
-        JXconfig::addConfigToForm($form, $this->ID);
+        JXconfig::addConfigToForm($form, $this->ID, true);
 
 //        Common::addHR($form);
 //
@@ -215,7 +215,7 @@ class DomainController extends pm_Controller_Action
         ));
 
         $form->addControlButtons(array(
-            'cancelLink' => Common::$urlListDomains
+            'cancelLink' => Common::$urlJXcoreDomains
         ));
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
@@ -271,7 +271,6 @@ class DomainController extends pm_Controller_Action
 //            $this->_status->addMessage("info", "actionRestartPressed = $actionRestartPressed, changed = $changed");
             if ($appRunning && ($actionRestartPressed || $changed)) {
                 $cmd = Common::$jxpath . " monitor kill " . $this->domain->getSpawnerPath() . " 2>&1";
-//                $cmd = $this->domain->getSpawnerExitCommand();;
                 @exec($cmd, $out, $ret);
                 if ($ret && $ret != 77) {
                     $this->_status->addMessage($ret ? "error" : "info", "Cannot stop the application: " . join("\n", $out) . ". Exit code: $ret");

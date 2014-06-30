@@ -86,36 +86,49 @@ class DebugController extends pm_Controller_Action
 
 
         $ids = Common::getDomainsIDs();
-        if (false)
+        $log = [];
         foreach ($ids as $id) {
-            $log = [];
-//            $start = microtime(true);
+//            $log = [];
+////            $start = microtime(true);
+//            $domain = Common::getDomain($id);
+////                $domain->getAppPathOrDefault(false, true);
+////                $domain->getAppPortOrDefault(true);
+//
+////            $time_taken = microtime(true) - $start;
+//
+////            $log[] = "domain $id took $time_taken : ";
+//            $log[] = "rootName = " . $domain->name;
+//            $log[] = "rootFolder = " . $domain->rootFolder;
+////            $log[] = "dir = " . $domain->rootFolder;
+////            $log[] = "domain $id";
+////            $log = array_merge($log, $domain->log);
+//
+//            $this->addText($form, $domain->name, join("<br>", $log));
+//            $this->addText($form, "ls -al", shell_exec("ls -al " . $domain->rootFolder));
+
+
             $domain = Common::getDomain($id);
-//                $domain->getAppPathOrDefault(false, true);
-//                $domain->getAppPortOrDefault(true);
+            $sub = $domain->getSubscription();
 
-//            $time_taken = microtime(true) - $start;
-
-//            $log[] = "domain $id took $time_taken : ";
-            $log[] = "rootName = " . $domain->name;
-            $log[] = "rootFolder = " . $domain->rootFolder;
-//            $log[] = "dir = " . $domain->rootFolder;
-//            $log[] = "domain $id";
-//            $log = array_merge($log, $domain->log);
-
-            $this->addText($form, $domain->name, join("<br>", $log));
-            $this->addText($form, "ls -al", shell_exec("ls -al " . $domain->rootFolder));
-
-
-
+            $log[] = "domain: {$domain->name}, sub: {$sub->mainDomain->name}";
         }
 
-        Common::addHR($form);
-        $this->addText($form, "freeports domain 1", join("<br>", Common::getTakenAppPorts(1, true)));
+        $this->addText($form, "subs", join("<br>", $log));
+
+//        Common::addHR($form);
+//        $this->addText($form, "freeports domain 1", join("<br>", Common::getTakenAppPorts(1, true)));
 
 
         $client = pm_Session::getClient();
         $clid = $client->getId();
+
+        Common::addHR($form);
+
+        //$sub = SubscriptionInfo::getSubscription(4);
+//        $d1 = Common::getDomain(7);
+//        $sub1 = $d1->getSubscription();
+//        var_dump($sub1);
+
         Common::addHR($form);
         $this->addText($form, "Client id", $clid);
 

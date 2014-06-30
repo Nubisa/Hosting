@@ -28,12 +28,15 @@ class IndexController extends pm_Controller_Action
                 array(
                     'title' => 'NPM Modules',
                     'action' => 'listmodules',
-                )
-            );
-
-            $this->view->tabs[] = array(
-                'title' => 'Monitor log',
-                'action' => 'log'
+                ),
+                array(
+                    'title' => 'Monitor log',
+                    'action' => 'log'
+                ),
+                array(
+                    'title' => 'Subscriptions',
+                    'action' => 'listsubscriptions'
+                ),
             );
         }
     }
@@ -222,7 +225,7 @@ class IndexController extends pm_Controller_Action
 
                 $this->common->refreshValues();
                 Common::updateBatchAndCron();
-                $this->monitorStartStop("start");
+                Common::monitorStartStop("start");
             }
 
             pm_Settings::set(Common::sidFirstRun, "no");
@@ -356,7 +359,7 @@ class IndexController extends pm_Controller_Action
                 ));
 
 
-                JXconfig::addConfigToForm($form);
+//                JXconfig::addConfigToForm($form);
 
                 $form->addElement('simpleText', "restartmayoccur", array(
                     'label' => '',
@@ -376,7 +379,7 @@ class IndexController extends pm_Controller_Action
                 $installAction = in_array($req->getParam($sidJXcore), ["install", "uninstall"]);
 
                 if ($monitorAction) {
-                    $this->monitorStartStop($req->getParam($sidMonitor));
+                    Common::monitorStartStop($req->getParam($sidMonitor));
                 } else if ($installAction) {
                     $this->JXcoreInstallUninstall($req->getParam($sidJXcore));
                 } else {
@@ -385,13 +388,12 @@ class IndexController extends pm_Controller_Action
 
 //                        Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess,
 
-                        Common::sidDomainJXcoreAppMaxCPULimit,
-                        Common::sidDomainJXcoreAppMaxCPUInterval,
-                        Common::sidDomainJXcoreAppMaxMemLimit,
-                        Common::sidDomainJXcoreAppAllowCustomSocketPort,
-                        Common::sidDomainJXcoreAppAllowSysExec,
-                        Common::sidDomainJXcoreAppAllowLocalNativeModules
-                        //  Common::sidDomainJXcoreAppAllowSpawnChild
+//                        Common::sidDomainJXcoreAppMaxCPULimit,
+//                        Common::sidDomainJXcoreAppMaxCPUInterval,
+//                        Common::sidDomainJXcoreAppMaxMemLimit,
+//                        Common::sidDomainJXcoreAppAllowCustomSocketPort,
+//                        Common::sidDomainJXcoreAppAllowSysExec,
+//                        Common::sidDomainJXcoreAppAllowLocalNativeModules
                     ];
 
 
@@ -406,12 +408,8 @@ class IndexController extends pm_Controller_Action
 
                     if ($portsChanged) {
 //                        $this->_status->addMessage("info", "Port range has changed. Monitro will restart.");
-                        Common::saveConfig();
                         Common::reassignPorts();
-                        if ($monitorRunning) {
-                            $this->monitorStartStop("stop");
-                            $this->monitorStartStop("start");
-                        }
+                        Common::monitorStartStop("restart");
                     }
                     $this->_status->addMessage('info', 'Data was successfully saved.');
                 }
@@ -565,6 +563,32 @@ class IndexController extends pm_Controller_Action
     }
 
 
+    /**
+     * Subscription list
+     */
+    public function listsubscriptionsAction()
+    {
+        if ($this->redirect()) return;
+        $this->view->list = $this->getSubscriptions();
+        if ($this->view->list) {
+            $this->view->list->setDataUrl(array('action' => 'listsubscriptions-data'));
+        }
+        Common::check();
+    }
+
+    /**
+     * Action for subscription list - when user clicks on table's column header.
+     */
+    public function listsubscriptionsDataAction()
+    {
+        $this->listsubscriptionsAction();
+
+        // Json data from pm_View_List_Simple
+        $this->_helper->json($this->view->list->fetchData());
+        Common::check();
+    }
+
+
 
     private function _getDomains()
     {
@@ -599,7 +623,7 @@ class IndexController extends pm_Controller_Action
             if ($status != 1) $status = false; else $status = true;
 
             $baseUrl = pm_Context::getBaseUrl() . 'index.php/domain/';
-            $switchUrl = Common::$urlListDomains . "/id/$id";
+            $switchUrl = Common::$urlJXcoreDomains . "/id/$id";
             $editUrl = $baseUrl . 'config/id/' . $id;
 
             // switching JXcore support (enabled/disabled) from listdomains
@@ -657,6 +681,102 @@ class IndexController extends pm_Controller_Action
                 'title' => 'Runs as user',
                 'noEscape' => true,
             ),
+            'column-8' => array(
+                'title' => '',
+                'noEscape' => true,
+            ),
+        );
+
+        $list->setColumns($columns);
+        // Take into account listDataAction corresponds to the URL /list-data/
+        $list->setDataUrl(array('action' => 'listdomains-data'));
+
+        return $list;
+    }
+
+
+    private function getSubscriptions()
+    {
+        if (!Common::$jxv) {
+            $this->_status->addMessage("error", "JXcore is not installed");
+            return;
+        }
+
+        function url($url, $str)
+        {
+            return '<a href="' . $url . '">' . $str . '</a>';
+        }
+
+        $client = pm_Session::getClient();
+        $clid = $client->getId();
+
+        $data = array();
+        $ids = Common::getDomainsIDs();
+        $cnt = 1;
+
+        // fetching domain list
+        $dbAdapter = pm_Bootstrap::getDbAdapter();
+        $sql = "SELECT * from `Subscriptions` where object_type = 'domain'";
+        $statement = $dbAdapter->query($sql);
+
+        while ($row = $statement->fetch()) {
+            $id = intval($row['id']);
+            $domainId = intval($row['object_id']);
+            $domain = Common::getDomain($domainId);
+
+            if (!Common::$isAdmin && $clid != $domain->row['cl_id']) {
+                continue;
+            }
+
+            $status = $domain->JXcoreSupportEnabled();
+            if ($status != 1) $status = false; else $status = true;
+
+            $baseUrl = pm_Context::getBaseUrl() . 'index.php/subscription/';
+            $editUrl = $baseUrl . 'config/id/' . $id;
+
+            $data[] = array(
+                'column-1' => $id,
+                'column-2' => url($editUrl, $domain->row['displayName']),
+                'column-3' => url($editUrl, $domain->row['cr_date']),
+                'column-4' => Common::getIcon($status, "Enabled", "Disabled"),
+            //    'column-5' => $domain->getAppPortStatus(null, false),
+            //    'column-6' =>  $domain->getAppStatus(),
+//                'column-7' => url($editUrl, $domain->sysUser),
+                'column-8' => Common::getSimpleButton("edit", "Manage", null, null, $editUrl),
+            );
+        }
+
+        $list = new pm_View_List_Simple($this->view, $this->_request);
+        $list->setData($data);
+        $columns = array(
+            'column-1' => array(
+                'title' => 'Id',
+                'noEscape' => true,
+            ),
+            'column-2' => array(
+                'title' => 'Domain Name',
+                'noEscape' => true,
+            ),
+            'column-3' => array(
+                'title' => 'Creation date',
+                'noEscape' => true,
+            ),
+            'column-4' => array(
+                'title' => 'JXcore Node.JS',
+                'noEscape' => true,
+            ),
+//            'column-5' => array(
+//                'title' => 'TCP / TCPS',
+//                'noEscape' => true,
+//            ),
+//            'column-6' => array(
+//                'title' => 'Application status',
+//                'noEscape' => true,
+//            ),
+//            'column-7' => array(
+//                'title' => 'Runs as user',
+//                'noEscape' => true,
+//            ),
             'column-8' => array(
                 'title' => '',
                 'noEscape' => true,
@@ -729,7 +849,9 @@ class IndexController extends pm_Controller_Action
                         $output = 'Cannot save downloaded file {$file} into {$zip}.';
                         return false;
                     } else {
-                        exec("rm -rf $unzippedDir");
+//                        exec("rm -rf $unzippedDir");
+                        Common::rmdir($unzippedDir);
+                        Common::rmdir(Common::$dirSubscriptionConfigs);
                         //unlink($unzippedJX);
 
                         $zipObj = new ZipArchive();
@@ -772,63 +894,13 @@ class IndexController extends pm_Controller_Action
     }
 
 
-    private function monitorStartStop($req)
-    {
-        if (!Common::isJXValid() || !in_array($req, ['start', 'stop'], true)) return;
-        $cmd = null;
 
-        $json = null;
-        $monitorWasRunning = Common::getURL(Common::$urlMonitor, $json);
-
-        if ($req === 'start' && !$monitorWasRunning) {
-            $ret = Common::updateCronImmediate("start");
-            $cmd = null;
-        } else
-            if ($req === 'stop' && $monitorWasRunning) {
-                $cmd = Common::$jxpath . " monitor stop";
-//                $ret = Common::updateCronImmediate("stop");
-//                $cmd = null;
-            } else {
-                return;
-            }
-
-        if ($cmd !== null) {
-            $cwd = getcwd();
-            chdir(dirname(Common::$jxpath));
-            @exec($cmd, $out, $ret);
-            chdir($cwd);
-
-
-            if ($req === 'stop' && $monitorWasRunning) {
-                // weird exit code on jx monitor stop (8)
-                $monitorIsRunning = Common::getURL(Common::$urlMonitor, $json);
-                if (!$monitorIsRunning) $ret = 0;
-            }
-
-            if ($ret && $ret != 255) {
-                $this->_status->addMessage('error', "Could not execute command: $cmd. Error code = $ret. " . join(", ", $out));
-            } //else {
-//                $this->_status->addMessage('info', "Executed command: $cmd. Error code = $ret. " . join(", ", $out));
-//            }
-        }
-
-
-        $json = null;
-        $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
-
-        if ($req === 'start' && $monitorRunning && !$monitorWasRunning) {
-            $this->_status->addMessage('info', "JXcore Monitor successfully started.");
-        }
-        if ($req === 'stop' && !$monitorRunning && $monitorWasRunning) {
-            $this->_status->addMessage('info', "JXcore Monitor successfully stopped.");
-        }
-    }
 
     private function JXcoreInstallUninstall($req)
     {
         // shutting down monitor if it's online
         if (in_array($req, ['install', 'uninstall'], true) && Common::isJXValid()) {
-            $this->monitorStartStop('stop');
+            Common::monitorStartStop('stop');
         }
 
         if ($req === 'install') {
@@ -836,23 +908,15 @@ class IndexController extends pm_Controller_Action
             $ok = $this->download_JXcore($out);
             $this->_status->addMessage($ok ? 'info' : 'error', $out);
 
-            $this->monitorStartStop('start');
+            Common::monitorStartStop('start');
         } else
             if ($req === 'uninstall' && Common::isJXValid()) {
 
                 $dir = dirname(Common::$jxpath) . "/";
+                // deleting subscriptions folder, because there are copies of jx binaries there
+                Common::rmdir(Common::$dirSubscriptionConfigs);
                 // deleting jxcore folder
-                if (is_dir($dir)) {
-                    $files = array_diff(scandir($dir), array('.', '..'));
-
-                    foreach ($files as $file) {
-                        @unlink("$dir/$file");
-                    }
-                    $ok = @rmdir($dir);
-                } else {
-                    $ok = true;
-                }
-
+                $ok = Common::rmdir($dir);
                 Common::setJXdata(null, null);
 
                 if ($ok) {
