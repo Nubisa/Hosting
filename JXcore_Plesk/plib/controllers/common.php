@@ -1811,6 +1811,8 @@ class SubscriptionInfo {
     public function get($sid) {
         $wasSet = $this->wasSet($sid);
 
+
+
         return pm_Settings::get($sid . $this->sid);
     }
 

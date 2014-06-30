@@ -29,7 +29,7 @@ class SubscriptionController extends pm_Controller_Action
         }
 
         $this->subscription = SubscriptionInfo::getSubscription($this->ID);
-        $this->view->breadCrumb = 'Navigation: <a href="' . Common::$urlJXcoreSubscriptions . '">Subscriptions</a> -> ' . $this->domain->name;
+        $this->view->breadCrumb = 'Navigation: <a href="' . Common::$urlJXcoreSubscriptions . '">Subscriptions</a> -> ' . $this->subscription->mainDomain->name;
     }
 
     public function indexAction()
