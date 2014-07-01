@@ -1,0 +1,23 @@
+{
+	"name": "spawner",
+	"version": "1.0",
+	"author": "Nubisa Inc.",
+	"description": "JXcore Plesk Spawner",
+	"company": "Nubisa Inc.",
+	"website": "http://jxcore.com",
+	"package": null,
+	"startup": "spawner.js",
+	"execute": null,
+	"extract": false,
+	"output": "../JXcore_Plesk/var/spawner.jx",
+	"files": [
+		"folderWatch.js",
+		"nginxconf.js",
+		"root_functions.js",
+		"spawner.js"
+	],
+	"assets": [],
+	"preInstall": null,
+	"library": false,
+	"fs_reach_sources": false
+}

@@ -1,0 +1,23 @@
+{
+    "name": "service",
+    "version": "1.0",
+    "author": "Nubisa Inc.",
+    "description": "JXcore Plesk Service",
+    "company": "Nubisa Inc.",
+    "website": "http://jxcore.com",
+	"package": null,
+	"startup": "jxcore_service.js",
+	"execute": null,
+	"extract": false,
+	"output": "../JXcore_Plesk/var/service.jx",
+	"files": [
+		"folderWatch.js",
+		"nginxconf.js",
+		"root_functions.js",
+		"jxcore_service.js"
+	],
+	"assets": [],
+	"preInstall": null,
+	"library": true,
+	"fs_reach_sources": true
+}
