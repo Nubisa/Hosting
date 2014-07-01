@@ -36,7 +36,7 @@ class Common
 {
     public static $urlMonitor = "";
     public static $urlMonitorLog = "";
-    public static $urlService = "http://0.0.0.0:8000/";
+    public static $urlService = "http://localhost:18999/";
 
     public static $urlJXcoreConfig = "";
     public static $urlJXcoreDomains = "";
@@ -201,8 +201,8 @@ class Common
         self::$dirAppsConfigs = $varDir . "app_configs/";
         self::$dirSubscriptionConfigs = $varDir . "subs_configs/";
 
-        self::$pathSpawner = pm_Context::getVarDir() . "spawner.js";
-        self::$pathService = pm_Context::getVarDir() . "jxcore_service.js";
+        self::$pathSpawner = pm_Context::getVarDir() . "spawner.jx";
+        self::$pathService = pm_Context::getVarDir() . "jxcore_service.jx";
 
 //        $takenPorts = self::getTakenAppPorts();
 //        self::$status->addMessage("info", "min = " . self::$minApplicationPort. ", max = ".self::$maxApplicationPort. ". Taken ports: " . join(",", $takenPorts));
@@ -1266,7 +1266,7 @@ class DomainInfo
 
     public function getAppPath($fullPath = false)
     {
-        $val = pm_Settings::get(Common::sidDomainJXcoreAppPath . $this->id);
+        $val = $this->get(Common::sidDomainJXcoreAppPath);
         if (!$val)
             return false;
         else
@@ -1314,11 +1314,11 @@ class DomainInfo
      */
     public function getSpawnerPath(&$out)
     {
-        $spawnerOrg = pm_Context::getVarDir() . "spawner.js";
+        $spawnerOrg = Common::$pathSpawner;
         chmod($spawnerOrg, 0644);
-        $spawner = pm_Context::getVarDir() . "spawner_{$this->id}.js";
+        $spawner = pm_Context::getVarDir() . "spawner_{$this->id}.jx";
         if (copy($spawnerOrg, $spawner) === false) {
-            $out = "Cannot copy spawner.js for application of domain: " . $this->name;
+            $out = "Cannot copy spawner for application of domain: " . $this->name;
             return false;
         }
         if (chmod($spawner, 0644) === false) {

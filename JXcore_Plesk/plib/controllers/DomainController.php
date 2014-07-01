@@ -135,9 +135,13 @@ class DomainController extends pm_Controller_Action
             'description' => $jxEnabled ? "" : "Application will start automatically when JXcore support is enabled."
         ));
 
+        $validFileName = $canEdit ? new MyValid_FileName() : null;
+        if ($validFileName) $validFileName->domain = $this->domain;
         $form->addElement($canEdit ? 'text' : 'simpleText', Common::sidDomainJXcoreAppPath, array(
             'label' => 'Application file path',
             'value' => $this->domain->getAppPathOrDefault(false),
+            'validators' => array($validFileName),
+            'filters' => array('StringTrim'),
             'required' => false,
             'description' => "The path is relative to domain root folder.",
             'escape' => false
@@ -251,7 +255,7 @@ class DomainController extends pm_Controller_Action
                 $val = $form->getValue($param);
 //                $this->_status->addMessage('warning', "val of $param = $val.");
 
-                if (pm_Settings::get($param . $this->ID) !== $form->getValue($param)) {
+                if (pm_Settings::get($param . $this->ID) !== $val) {
                     $changed = true;
                 }
 //                pm_Settings::set($param . $this->ID, $form->getValue($param));
@@ -502,3 +506,69 @@ class MyValid_NumericBetween extends Zend_Validate_Abstract
     }
 }
 
+
+
+
+
+class MyValid_FileName extends Zend_Validate_Abstract
+{
+    const MSG_CANNOTCONTAIN = 'msgCannotContain';
+    const MSG_CANNOTSTART = 'msgCannotStart';
+    const MSG_ISADIR = 'msgIsaDir';
+
+    public $cannotContain = 0;
+    public $cannotStart = 0;
+    public $domain = null;
+
+    protected $_messageVariables = array(
+        'cannotContain' => 'cannotContain',
+        'cannotStart' => 'cannotStart'
+    );
+
+    protected $_messageTemplates = array(
+        self::MSG_CANNOTCONTAIN => "The file name cannot contain '%cannotContain%'.",
+        self::MSG_CANNOTSTART => "The file name cannot start with a '%cannotStart%'.",
+        self::MSG_ISADIR => "Provided path exists and is a directory."
+    );
+
+    public function isValid($value)
+    {
+        $value = trim($value);
+        //if (substr($value, 0, 1) == "/") $value = substr($value, 1);
+
+        $this->_setValue($value);
+
+        $forbidden = [ './', '/.', '.\\', '\\.'  ];
+        foreach($forbidden as $str) {
+            if (strpos($value, $str) !== false) {
+                $this->cannotContain = $str;
+                $this->_error(self::MSG_CANNOTCONTAIN);
+                return false;
+            }
+        }
+
+        $forbidden = [ '/', '\\'];
+        foreach($forbidden as $str) {
+
+
+//            $this->cannotStart = substr($value, 0, strlen($str));
+//            $this->_error(self::MSG_CANNOTSTART);
+//            return false;
+
+            if (substr($value, 0, strlen($str)) === $str) {
+                $this->cannotStart = $str;
+                $this->_error(self::MSG_CANNOTSTART);
+                return false;
+            }
+        }
+
+        $fullPath = $this->domain->rootFolder . $value;
+        if (is_dir($fullPath)) {
+            $this->cannotContain = $str;
+            $this->_error(self::MSG_ISADIR);
+            return false;
+        }
+
+        return true;
+    }
+}
