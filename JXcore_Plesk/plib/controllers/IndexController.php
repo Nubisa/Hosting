@@ -218,13 +218,13 @@ class IndexController extends pm_Controller_Action
             if (!Common::isJXValid()) {
                 $out = null;
 
-                Common::enableServices();
-
                 $ok = $this->download_JXcore($out);
                 $this->_status->addMessage($ok ? 'info' : 'error', $out);
 
                 $this->common->refreshValues();
+                Common::enableServices();
                 Common::updateBatchAndCron();
+                Common::saveConfig();
                 Common::monitorStartStop("start");
             }
 
@@ -246,8 +246,8 @@ class IndexController extends pm_Controller_Action
         $sidJXcore = 'jx_binary_install_uninstall';
         $req = $this->getRequest();
 
-        $json = null;
-        $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
+        $json = Common::getMonitorJSON();
+        $monitorRunning = $json !== null;
 
         // Init form here
         $form = new pm_Form_Simple();
@@ -563,31 +563,6 @@ class IndexController extends pm_Controller_Action
     }
 
 
-    /**
-     * Subscription list
-     */
-    public function listsubscriptionsAction()
-    {
-        if ($this->redirect()) return;
-        $this->view->list = $this->getSubscriptions();
-        if ($this->view->list) {
-            $this->view->list->setDataUrl(array('action' => 'listsubscriptions-data'));
-        }
-        Common::check();
-    }
-
-    /**
-     * Action for subscription list - when user clicks on table's column header.
-     */
-    public function listsubscriptionsDataAction()
-    {
-        $this->listsubscriptionsAction();
-
-        // Json data from pm_View_List_Simple
-        $this->_helper->json($this->view->list->fetchData());
-        Common::check();
-    }
-
 
 
     private function _getDomains()
@@ -695,6 +670,34 @@ class IndexController extends pm_Controller_Action
     }
 
 
+
+
+    /**
+     * Subscription list
+     */
+    public function listsubscriptionsAction()
+    {
+        if ($this->redirect()) return;
+        $this->view->list = $this->getSubscriptions();
+        if ($this->view->list) {
+            $this->view->list->setDataUrl(array('action' => 'listsubscriptions-data'));
+        }
+        Common::check();
+    }
+
+    /**
+     * Action for subscription list - when user clicks on table's column header.
+     */
+    public function listsubscriptionsDataAction()
+    {
+        $this->listsubscriptionsAction();
+
+        // Json data from pm_View_List_Simple
+        $this->_helper->json($this->view->list->fetchData());
+        Common::check();
+    }
+
+
     private function getSubscriptions()
     {
         if (!Common::$jxv) {
@@ -714,6 +717,8 @@ class IndexController extends pm_Controller_Action
         $ids = Common::getDomainsIDs();
         $cnt = 1;
 
+        $json = Common::getMonitorJSON();
+
         // fetching domain list
         $dbAdapter = pm_Bootstrap::getDbAdapter();
         $sql = "SELECT * from `Subscriptions` where object_type = 'domain'";
@@ -723,6 +728,7 @@ class IndexController extends pm_Controller_Action
             $id = intval($row['id']);
             $domainId = intval($row['object_id']);
             $domain = Common::getDomain($domainId);
+            $sub = SubscriptionInfo::getSubscription($id);
 
             if (!Common::$isAdmin && $clid != $domain->row['cl_id']) {
                 continue;
@@ -734,11 +740,19 @@ class IndexController extends pm_Controller_Action
             $baseUrl = pm_Context::getBaseUrl() . 'index.php/subscription/';
             $editUrl = $baseUrl . 'config/id/' . $id;
 
+            $domains = $sub->getDomains();
+            $domains_str = "";
+            foreach($domains as $d) {
+                $domains_str .=  $d->name . "<br>";
+//                $domains_str .= $d- $d->getAppStatus() . "<br>";
+            }
+
+
             $data[] = array(
                 'column-1' => $id,
                 'column-2' => url($editUrl, $domain->row['displayName']),
-                'column-3' => url($editUrl, $domain->row['cr_date']),
-                'column-4' => Common::getIcon($status, "Enabled", "Disabled"),
+                'column-3' => $domains_str,
+//                'column-4' => Common::getIcon($status, "Enabled", "Disabled"),
             //    'column-5' => $domain->getAppPortStatus(null, false),
             //    'column-6' =>  $domain->getAppStatus(),
 //                'column-7' => url($editUrl, $domain->sysUser),
@@ -754,17 +768,17 @@ class IndexController extends pm_Controller_Action
                 'noEscape' => true,
             ),
             'column-2' => array(
-                'title' => 'Domain Name',
+                'title' => 'Subscription',
                 'noEscape' => true,
             ),
             'column-3' => array(
-                'title' => 'Creation date',
+                'title' => 'Domains',
                 'noEscape' => true,
             ),
-            'column-4' => array(
-                'title' => 'JXcore Node.JS',
-                'noEscape' => true,
-            ),
+//            'column-4' => array(
+//                'title' => 'JXcore Node.JS',
+//                'noEscape' => true,
+//            ),
 //            'column-5' => array(
 //                'title' => 'TCP / TCPS',
 //                'noEscape' => true,

@@ -54,5 +54,7 @@ try {
 
 } catch(PleskAPIParseException $e) {
     echo $e->getMessage() . "\n";
+    echo "The id is: $id";
+    // todo: fix this
     exit(1);
 }

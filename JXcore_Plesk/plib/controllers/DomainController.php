@@ -56,8 +56,8 @@ class DomainController extends pm_Controller_Action
 
     public function configAction()
     {
-        $json = "";
-        $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
+        $json = Common::getMonitorJSON();
+        $monitorRunning = $json !== null;
         $appRunning = $this->domain->isAppRunning($json);
         $canEdit = Common::$isAdmin;
 

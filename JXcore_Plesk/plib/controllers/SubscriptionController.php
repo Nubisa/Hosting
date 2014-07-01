@@ -40,11 +40,12 @@ class SubscriptionController extends pm_Controller_Action
 
     public function configAction()
     {
-        $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
+        $json = Common::getMonitorJSON();
+        $monitorRunning = $json !== null;
 
         $form = new pm_Form_Simple();
 
-        JXconfig::addConfigToForm($form, $this->subscription->sid, false);
+        JXconfig::addConfigToForm($form, $this->subscription->id, false);
 
         if ($monitorRunning) {
             $form->addElement('simpleText', "restartmayoccur", array(
@@ -84,6 +85,7 @@ class SubscriptionController extends pm_Controller_Action
             $this->_status->addMessage('info', 'Data was successfully saved.');
 
             if ($changed && $monitorRunning) {
+//                $this->subscription->saveConfig();
                 Common::monitorStartStop('restart');
             }
 

@@ -27,6 +27,8 @@
  *          /usr/local/psa/bin/repair -r
  *      - reload nginx config:
  *          /etc/init.d/nginx reload
+ *
+ * sudo date --set "15 May 2014 11:30:00"
  */
 
 
@@ -107,6 +109,9 @@ class Common
 
     private static $domains = [];
     private static $domainsFetched = false;
+
+    private static $monitorJSON = null;
+    private static $monitorJSONFetched = false;
 
     function Common($controller, $status = null)
     {
@@ -201,6 +206,23 @@ class Common
 
 //        $takenPorts = self::getTakenAppPorts();
 //        self::$status->addMessage("info", "min = " . self::$minApplicationPort. ", max = ".self::$maxApplicationPort. ". Taken ports: " . join(",", $takenPorts));
+    }
+
+
+    public static function getMonitorJSON($refresh = false)
+    {
+        if (!self::$monitorJSONFetched || $refresh) {
+            $tmp = null;
+            $monitorRunning = self::getURL(self::$urlMonitor, $tmp);
+//            StatusMessage::addDebug("Loading monitor");
+            self::$monitorJSONFetched = true;
+            if ($monitorRunning) {
+                self::$monitorJSON = $tmp;
+            } else {
+                self::$monitorJSON = null;
+            }
+        }
+        return self::$monitorJSON;
     }
 
     public static function addHR(&$form)
@@ -301,8 +323,6 @@ class Common
 
     public static function setJXdata($version, $path)
     {
-        self::saveConfig($path);
-
         pm_Settings::set(self::sidJXversion, $version);
         pm_Settings::set(self::sidJXpath, $path);
 
@@ -313,6 +333,8 @@ class Common
         Common::mkdir(self::$dirAppsConfigs);
 
         self::refreshValues();
+
+        self::saveConfig($path);
     }
 
     public static function saveBlockToText($contents, $blockName, $blockBody, $beginning)
@@ -466,6 +488,7 @@ class Common
     {
         self::checkPortRange();
         self::checkCronScheduleStatus(true);
+        self::checkNginx();
     }
 
 
@@ -491,6 +514,7 @@ class Common
 //                'which a2enmod > /tmp/xxx.txt',
 //                'a2enmod proxy_http >> /tmp/xxx.txt',
 
+                // '/opt/psa/admin/sbin/nginxmng -e',
 
                 'if [ -d /etc/nginx/conf.d ] && [ ! -e /etc/nginx/conf.d/jxcore.conf ]; then',
                 'mkdir /etc/nginx/jxcore.conf.d',
@@ -544,8 +568,8 @@ class Common
                 if ($domainId && intval($domainId) === $id) {
 
                     $sleep = 3;
-                    $json = null;
-                    $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
+                    $json = self::getMonitorJSON();
+                    $monitorRunning = $json !== null;
                     $appRunning = strpos($json, $path) !== false;
 
                     $msg = "";
@@ -562,7 +586,7 @@ class Common
                         @exec($cmd, $out, $ret);
                         // cannot rely on exitcode, so checking the monitor
 
-                        Common::getURL(Common::$urlMonitor, $json);
+//                      abc  Common::getURL(Common::$urlMonitor, $json);
                         $appRunning = strpos($json, $path) !== false;
                         if ($appRunning) {
                             self::$status->addMessage("error", "Cannot stop the application. ". join("\n", $out) . ". Exit code: $ret");
@@ -581,7 +605,7 @@ class Common
                             @exec($cmd, $out, $ret);
                             // cannot rely on exitcode, so checking the monitor
 
-                            Common::getURL(Common::$urlMonitor, $json);
+                            $json = self::getMonitorJSON(true);
                             $appRunning = strpos($json, $path) !== false;
                             self::$status->addMessage($appRunning ? "info" : "error", $appRunning ? "The application successfully started." : "The application could not be started.");
                             $cmd = null;
@@ -721,7 +745,8 @@ class Common
             }
         } else {
 
-            $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
+            $json = self::getMonitorJSON();
+            $monitorRunning = $json !== null;
             if ($monitorRunning && $action == 'start') {
                 self::updateCronImmediate();
             } else if (!$monitorRunning && $action == 'stop') {
@@ -886,6 +911,7 @@ class Common
 
     public static function enableServices() {
         self::enableHttpProxy();
+        // moved to startup batch
         self::enableNginx();
     }
 
@@ -924,8 +950,56 @@ class Common
     }
 
 
-    private static function enableNginx() {
-        self::callService("nginx", "start", null, "Nginx could not be enabled.");
+    private static function checkNginx($verbose = true)
+    {
+//        $json = self::getMonitorJSON();
+//        $monitorRunning = self::getURL(self::$urlMonitor, $json);
+//
+//        if ($json !== null && strpos($json, "jxcore_service.js") !== false) {
+//            $ret = self::callService("nginx", "check", null, null, true);
+//            if (trim($ret) !== 'Enabled') {
+//                self::$status->addMessage('warning', "Nginx is not enabled. $ret");
+//            }
+//        }
+
+//        // this is no use, since psaadm cannot run the command
+        $cmd = '/opt/psa/admin/bin/nginxmng -s 2>&1';
+        @exec($cmd, $out, $ret);
+
+        if (!$ret) {
+            $str = join("\n", $out);
+            $enabled = strpos($str, "Enabled") !== false;
+            if (!$enabled && $verbose)
+                self::$status->addMessage('warning', "Nginx is not enabled. Status: $str.");
+
+            return $enabled;
+        } else {
+            self::$status->addMessage("error", "Cannot fetch nginx status. " . join("\n", $out) . ". Exit code: $ret.");
+            return false;
+        }
+    }
+
+    private static function enableNginx()
+    {
+//        self::callService("nginx", "start", null, "Nginx could not be enabled.");
+
+//        $cmd2 = "/opt/psa/admin/bin/apache_control_adapter --restart";
+        $cmd2 = "/opt/psa/admin/bin/nginxmng -e 2>&1";
+
+        if (!self::checkNginx(false)) {
+            $out = null;
+            $ret = null;
+            @exec($cmd2, $out, $ret);
+            if (!$ret) {
+                $enabled = self::checkNginx(false);
+                $isOn = strpos($out, "Enabled") !== false;
+                if (!$isOn) {
+                    self::$status->addMessage("error", "Nginx could not be enabled.");
+                }
+            } else {
+                self::$status->addMessage("error", "Cannot enable Nginx.");
+            }
+        }
     }
 
 
@@ -960,8 +1034,8 @@ class Common
         if (!self::isJXValid() || !in_array($req, ['start', 'stop', 'restart'], true)) return;
         $cmd = null;
 
-        $json = null;
-        $monitorWasRunning = self::getURL(Common::$urlMonitor, $json);
+        $json = self::getMonitorJSON();
+        $monitorWasRunning = $json !== null;
 
         if ($req == 'restart') {
             // refreshes the config every time monitor is called for restart
@@ -969,7 +1043,8 @@ class Common
 
             if ($monitorWasRunning) {
                 self::monitorStartStop("stop");
-                $monitorWasRunning = self::getURL(Common::$urlMonitor, $json);
+                $json = self::getMonitorJSON(true);
+                $monitorWasRunning = $json !== null;
             } else {
                 // don't restart if was not running
                 return;
@@ -977,6 +1052,7 @@ class Common
         }
 
         if (in_array($req, ['start', 'restart']) && !$monitorWasRunning) {
+            self::enableServices();
             $ret = Common::updateCronImmediate("start");
             $cmd = null;
         } else
@@ -992,21 +1068,22 @@ class Common
             @exec($cmd, $out, $ret);
             chdir($cwd);
 
+            // let's get a new JSON with next self::getMonitorJSON() call
+            self::$monitorJSONFetched = false;
+
             if ($req === 'stop' && $monitorWasRunning) {
                 // weird exit code on jx monitor stop (8)
-                $monitorIsRunning = Common::getURL(Common::$urlMonitor, $json);
-                if (!$monitorIsRunning) $ret = 0;
+                $json = self::getMonitorJSON();
+                if ($json === null) $ret = 0;
             }
 
             if ($ret && $ret != 255) {
                 self::$status->addMessage('error', "Could not execute command: $cmd. Error code = $ret. " . join(", ", $out));
-            } //else {
-//                $this->_status->addMessage('info', "Executed command: $cmd. Error code = $ret. " . join(", ", $out));
-//            }
+            }
         }
 
-        $json = null;
-        $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
+        $json = self::getMonitorJSON();
+        $monitorRunning = $json !== null;
 
         if ($req === 'start' && $monitorRunning && !$monitorWasRunning) {
             self::$status->addMessage('info', "JXcore Monitor successfully started.");
@@ -1088,7 +1165,7 @@ class DomainInfo
     public function isAppRunning($json = null)
     {
         if (!$json) {
-            Common::getURL(Common::$urlMonitor, $json);
+            $json = Common::getMonitorJSON();
         }
 
         $path = $this->getSpawnerPath($out);
@@ -1100,8 +1177,8 @@ class DomainInfo
     {
         $p = $this->getAppPathOrDefault(true);
         if (file_exists($p)) {
-            $json = "";
-            $monitorRunning = Common::getURL(Common::$urlMonitor, $json);
+            $json = Common::getMonitorJSON();
+            $monitorRunning = $json !== null;
 //            var_dump($json);
             $appRunning = $this->isAppRunning($json);
             if ($monitorRunning) {
@@ -1405,32 +1482,21 @@ class JXconfig {
     // allowSysExec: bool
     // allowLocalNativeModules: bool
 
-    /**
-     * Returns global value
-     */
-    public static function getGlobal() {
-        $fname = dirname(Common::$jxpath) . "/jx.config";
-        if (file_exists($fname)) {
-            $json = file_get_contents($fname);
-        }
-    }
 
+    private static function check(&$form, $sid, $domainId, $isDomain) {
 
-    private static function check(&$form, $sid, $domainId) {
-
-        return "";
-
-        if (!$domainId) return;
+        if (!$isDomain) return;
 
         $domain = Common::getDomain($domainId);
+        $sub = $domain->getSubscription();
+
         $vald = $domain->get($sid);
-        $valg = pm_Settings::get($sid);
+        $vals = $sub->get($sid);
 
-        if (!$vald && $valg) {
+        if (!$vald && $vals) {
 
-
-            if (!$form && $valg == 1) $valg = "'true'";
-            $ret = "The value $valg from global config will be used.";
+            if (!$form && $vals == 1) $vals = "'true'";
+            $ret = "The value $vals from subscription config will be used unless you submit this form.";
 
             if ($form) {
                 $form->addElement('simpleText', "{$sid}tmp", array(
@@ -1453,14 +1519,14 @@ class JXconfig {
     /*
      * Gets value for domain or subscription
      */
-    private static function get($sid, $id = "", $isDomain = false) {
-
-        if (!$id) $id = "";
+    private static function get($sid, $id, $isDomain = false) {
 
         if ($isDomain) {
             $domain = Common::getDomain($id);
+            $sub = $domain->getSubscription();
+
             $vald = $domain->get($sid);
-            $valg = pm_Settings::get($sid);
+            $vals = $sub->get($sid);
 
             $wasSet = $domain->wasSet($sid);
 
@@ -1468,13 +1534,16 @@ class JXconfig {
             if (in_array($sid, $edits) && !$vald && "$vald" !== "0" )
                 $wasSet = false;
 
-            if (!$wasSet && $valg) {
-                return $valg;
+            if (!$wasSet && $vals) {
+                return $vals;
             } else {
                 return $vald;
             }
         } else {
-            return pm_Settings::get($sid . $id);
+            $subscription = SubscriptionInfo::getSubscription($id);
+            $val = $subscription->get($sid);
+//            StatusMessage::addDebug("value for $sid = $val");
+            return $val;
         }
 
     }
@@ -1504,51 +1573,52 @@ class JXconfig {
         $typeChk = $canEdit ? 'checkbox' : 'simpleText';
         $tmpID = 0;
 
-        $val = self::get(Common::sidDomainJXcoreAppMaxMemLimit, $id);
+        $maxInt = array('Int', array("LessThan", true, array('max' => 2147483647)));
+
+        $val = self::get(Common::sidDomainJXcoreAppMaxMemLimit, $id, $isDomain);
         $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxMemLimit : ("field" . ($tmpID++)) , array(
             'label' => 'Maximum memory limit',
             'value' => $canEdit ? $val : ($val ? "$val kB" : "disabled"),
             'required' => false,
-            'validators' => array(
-                'Int',
-            ),
+            'validators' => array('Int', $maxInt),
             'description' => 'Maximum size of memory (kB), which can be allocated by the application. Value 0 disables the limit.',
             'escape' => false
         ));
-        self::check($form, Common::sidDomainJXcoreAppMaxMemLimit, $id);
+        self::check($form, Common::sidDomainJXcoreAppMaxMemLimit, $id, $isDomain);
 
-        $val = self::get(Common::sidDomainJXcoreAppMaxCPULimit, $id);
+        $val = self::get(Common::sidDomainJXcoreAppMaxCPULimit, $id, $isDomain);
         $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxCPULimit : ("field" . ($tmpID++)), array(
             'label' => 'Max CPU',
             'value' => $canEdit ? $val : ($val ? "$val %" : "disabled"),
             'required' => false,
             'validators' => array(
-                'Int',
+                'Int', $maxInt
                 //array("GreaterThan", true, array('min' => 0))),
                 //array("Between", true, array('min' => 1, 'max' => 100))
             ),
             'description' => 'Maximum CPU usage (percentage) allowed for the application. Value 0 disables the limit.',
             'escape' => false
         ));
-        self::check($form, Common::sidDomainJXcoreAppMaxCPULimit, $id);
+        self::check($form, Common::sidDomainJXcoreAppMaxCPULimit, $id, $isDomain);
 
-        $val = self::get(Common::sidDomainJXcoreAppMaxCPUInterval, $id);
+        $val = self::get(Common::sidDomainJXcoreAppMaxCPUInterval, $id, $isDomain);
         $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxCPUInterval : ("field" . ($tmpID++)), array(
             'label' => 'CPU check interval',
             'value' => $canEdit ? $val : ($val ? "$val seconds" : "default"),
             'required' => false,
             'validators' => array(
                 'Int', //, array("Between", true, array('min' => 1, 'max' => 100))
-                array("GreaterThan", true, array('min' => 0))
+                array("GreaterThan", true, array('min' => 0)),
+                $maxInt
             ),
             'description' => 'Interval (seconds) of Max CPU usage check. Default value is 2.',
             'escape' => false
         ));
-        self::check($form, Common::sidDomainJXcoreAppMaxCPUInterval, $id);
+        self::check($form, Common::sidDomainJXcoreAppMaxCPUInterval, $id, $isDomain);
 
         $fake = null;
-        $val = self::get(Common::sidDomainJXcoreAppAllowCustomSocketPort, $id);
-        $def = self::check($fake, Common::sidDomainJXcoreAppAllowCustomSocketPort, $id);
+        $val = self::get(Common::sidDomainJXcoreAppAllowCustomSocketPort, $id, $isDomain);
+        $def = self::check($fake, Common::sidDomainJXcoreAppAllowCustomSocketPort, $id, $isDomain);
         $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowCustomSocketPort : ("field" . ($tmpID++)), array(
             'label' => 'Allow custom socket port' ,
             'description' => "$def",
@@ -1557,17 +1627,17 @@ class JXconfig {
         ));
 
 
-        $val = self::get(Common::sidDomainJXcoreAppAllowSysExec, $id);
+        $val = self::get(Common::sidDomainJXcoreAppAllowSysExec, $id, $isDomain);
         $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowSysExec : ("field" . ($tmpID++)), array(
             'label' => 'Allow to spawn/exec child processes',
-            'description' => self::check($fake, Common::sidDomainJXcoreAppAllowSysExec, $id),
+            'description' => self::check($fake, Common::sidDomainJXcoreAppAllowSysExec, $id, $isDomain),
             'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
         ));
 
-        $val = self::get(Common::sidDomainJXcoreAppAllowLocalNativeModules, $id);
+        $val = self::get(Common::sidDomainJXcoreAppAllowLocalNativeModules, $id, $isDomain);
         $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowLocalNativeModules : ("field" . ($tmpID++)), array(
             'label' => 'Allow to call local native modules',
-            'description' => self::check($fake, Common::sidDomainJXcoreAppAllowLocalNativeModules, $id),
+            'description' => self::check($fake, Common::sidDomainJXcoreAppAllowLocalNativeModules, $id, $isDomain),
             'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
         ));
 
@@ -1694,7 +1764,7 @@ class SubscriptionInfo {
     public $sid = null;
 
     public $mainDomain = null;
-    //public $mainDomainId = null;
+    public $mainDomainId = null;
 
     public $jxdir = null;
     public $jxpath = null;
@@ -1713,7 +1783,8 @@ class SubscriptionInfo {
             $sub = new SubscriptionInfo();
             $sub->id = $row['id'];
             $sub->sid = "subscription" . $sub->id;
-            $sub->mainDomain = Common::getDomain($row['object_id']);
+            $sub->mainDomainId = $row['object_id'];
+            $sub->mainDomain = Common::getDomain($sub->mainDomainId);
 
             $sub->jxdir = Common::$dirSubscriptionConfigs . $sub->mainDomain->name . "/";
             $sub->jxpath = $sub->jxdir . basename(Common::$jxpath);
@@ -1811,9 +1882,14 @@ class SubscriptionInfo {
     public function get($sid) {
         $wasSet = $this->wasSet($sid);
 
+        $defaults = [];
+        $defaults[Common::sidDomainJXcoreAppAllowSysExec] = 1;
+        $defaults[Common::sidDomainJXcoreAppAllowLocalNativeModules] = 1;
 
-
-        return pm_Settings::get($sid . $this->sid);
+        if ($wasSet && !isset($defaults[$sid]))
+            return pm_Settings::get($sid . $this->sid);
+        else
+            return $defaults[$sid];
     }
 
     /**
@@ -1824,14 +1900,31 @@ class SubscriptionInfo {
      */
     public function set($sid, $value) {
         $old = $this->get($sid);
-        pm_Settings::get($sid . $this->sid);
-        pm_Settings::get($sid . $this->sid . "isset");
+        pm_Settings::set($sid . $this->sid, $value);
+        pm_Settings::set($sid . $this->sid . "isset", "true");
 
         return $old != $value;
     }
 
     public function wasSet($sid) {
         return pm_Settings::get($sid . $this->sid . "isset") == "true";
+    }
+
+    /**
+     * Gets domains for current subscription
+     * @return array
+     */
+    public function getDomains() {
+        $ids = Common::getDomainsIDs();
+
+        $ret = [];
+        foreach($ids as $id) {
+            $domain = Common::getDomain($id);
+            if ($id == $this->mainDomainId || $this->mainDomainId == $domain->webspaceId) {
+                $ret[$domain->id] = $domain;
+            }
+        }
+        return $ret;
     }
 
 }

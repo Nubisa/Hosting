@@ -101,18 +101,25 @@ var srv = http.createServer(function (req, res) {
 
         if (parsed.query.nginx) {
             var cmd = null;
+            var answer = null;
             if (parsed.query.nginx == "reload") {
                 cmd = "/etc/init.d/nginx reload";
             } else
             if (parsed.query.nginx == "start") {
                 cmd = "/opt/psa/admin/sbin/nginxmng -e";
             }
+            if (parsed.query.nginx == "check") {
+                var tmp = "/opt/psa/admin/sbin/nginxmng -s";
+                var ret = jxcore.utils.cmdSync(tmp);
+                answer = ret.out;
+            }
 
             if (cmd) {
                 var ret = jxcore.utils.cmdSync(cmd);
-                var answer = ret.exitCode ? ret.out : "OK";
+                answer = ret.exitCode ? ret.out : "OK";
             } else {
-                answer = "Unknown command.";
+                if (!answer)
+                    answer = "Unknown command.";
             }
 
             res.writeHead(200, {'Content-Type': 'text/plain'});
