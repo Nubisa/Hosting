@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <module>
   <id>jxcore_support</id>
-  <name>JXcore Node.JS</name>
-  <description>This extension adds JXcore Node.JS support into Parallel's Plesk Control Panel.
+  <name>JXcore Plesk Extension for Node</name>
+  <description>This extension adds JXcore support into Parallel's Plesk Control Panel to run Node applications.
   </description>
   <os>unix</os>
   <version>0.1.5</version>
