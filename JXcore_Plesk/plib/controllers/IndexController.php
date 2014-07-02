@@ -1,64 +1,22 @@
 <?php
-class CustomStatus
-{
-    function CustomStatus(){
-        $this->messageId = 0;
-    }
-    public function addMessage($type, $message){
-        $this->messageId++;
-        echo  "<script>"
-            . " if(!window.__inter" . $this->messageId . "){"
-            . "  window.__inter" . $this->messageId . " = setInterval(function(){"
-            . "    if(document.getElementById('content')){"
-            . "      clearInterval(window.__inter" . $this->messageId . ");"
-            . "    }else{return;}"
-            . "   __addMessage('".$type."','".$message."');"
-            . "  },500);}</script>";
-    }
-    public function hasMessages(){
-        return false;
-    }
-
-    public function addInfo($message){
-        $this->addMessage("info", $message);
-    }
-}
 
 class IndexController extends pm_Controller_Action
 {
 
+
+
     public function init()
     {
         parent::init();
-        if(get_class($this->view->status) != "AdminPanel_Controller_Action_Status")
-         {
-            $this->pleskVersion = 12;
-            //$this->view->status = new pm_View_Status();
-            $str = "<script>"
-                 . "  if(!window.__addMessage){"
-                 . "  window.__addMessage = function(type, message){"
-                 . "    var _content = document.getElementById('content').children;"
-                 . "    var xtypes={'info':'information','warn':'warning','err':'error'};"
-                 . "    var xtype = !xtypes[type] ? type:xtypes[type]; "
-                 . "    for(var o in _content){"
-                 . "      if( _content[o].className == 'heading'){"
-                 . "        _content[o].innerHTML+='<div class=\'msg-box msg-'+type+'\'>'"
-                 . "          + '<div class=\'msg-content\'><span class=\'title\'>' + xtype "
-                 . "          + ':</span>' + message + '</div></div>'; "
-                 . "        break;"
-                 . "      }"
-                 . "    }"
-                 . "  };} "
-                 . "</script>";
 
-            echo $str;
-
+        require_once("CustomStatus.php");
+        if(CustomStatus::CheckStatusRender($this)) // Plesk12
+        {
             $this->_status = new CustomStatus();
             $this->view->status = new CustomStatus();
         }
-        else{
-            $this->pleskVersion = 11;
-        }
+
+        $this->_status->addMessage("info", "aaaa");
 
 
         // Init title for all actions
@@ -67,8 +25,6 @@ class IndexController extends pm_Controller_Action
         require_once("common.php");
 
         $this->common = new Common($this, $this->view->status);
-
-        $this->_status->addMessage('info', "aaaaa");
 
         if (Common::$isAdmin) {
 
