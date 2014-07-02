@@ -16,7 +16,7 @@ class IndexController extends pm_Controller_Action
             $this->view->status = new CustomStatus();
         }
 
-        $this->_status->addMessage("info", "aaaa");
+       // $this->_status->addMessage("info", "aaaa");
 
 
         // Init title for all actions
