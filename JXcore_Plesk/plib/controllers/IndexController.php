@@ -221,10 +221,8 @@ class IndexController extends pm_Controller_Action
                 $ok = $this->download_JXcore($out);
                 $this->_status->addMessage($ok ? 'info' : 'error', $out);
 
-                $this->common->refreshValues();
                 Common::enableServices();
-                Common::updateBatchAndCron();
-                Common::saveConfig();
+                Common::updateAllConfigsIfNeeded();
                 Common::monitorStartStop("start");
             }
 
@@ -403,14 +401,9 @@ class IndexController extends pm_Controller_Action
                         pm_Settings::set($param, $form->getValue($param));
                     }
 
-                    Common::updateBatchAndCron(null);
-                    Common::refreshValues();
+                    if ($portsChanged) Common::reassignPorts();
+                    Common::updateAllConfigsIfNeeded();
 
-                    if ($portsChanged) {
-//                        $this->_status->addMessage("info", "Port range has changed. Monitro will restart.");
-                        Common::reassignPorts();
-                        Common::monitorStartStop("restart");
-                    }
                     $this->_status->addMessage('info', 'Data was successfully saved.');
                 }
                 $this->_helper->json(array('redirect' => Common::$urlJXcoreConfig));
@@ -582,7 +575,6 @@ class IndexController extends pm_Controller_Action
 
         $data = array();
         $ids = Common::getDomainsIDs();
-        $cnt = 1;
         foreach ($ids as $id) {
             $domain = Common::getDomain($id);
 
@@ -598,20 +590,7 @@ class IndexController extends pm_Controller_Action
             if ($status != 1) $status = false; else $status = true;
 
             $baseUrl = pm_Context::getBaseUrl() . 'index.php/domain/';
-            $switchUrl = Common::$urlJXcoreDomains . "/id/$id";
             $editUrl = $baseUrl . 'config/id/' . $id;
-
-            // switching JXcore support (enabled/disabled) from listdomains
-            $id_GET = $this->getRequest()->getParam('id');
-            if ($id_GET == $id) {
-                pm_Settings::set(Common::sidDomainJXcoreEnabled . $id, !$status);
-                $status = !$status;
-
-                Common::updateBatchAndCron($id);
-
-                $ret = Common::updatehtaccess($id);
-                if ($ret !== true) $this->_status->addMessage('error', $ret);
-            }
 
             $data[] = array(
                 'column-1' => $id,

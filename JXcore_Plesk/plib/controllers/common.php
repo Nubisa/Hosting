@@ -29,6 +29,10 @@
  *          /etc/init.d/nginx reload
  *
  * sudo date --set "15 May 2014 11:30:00"
+ *
+ *
+ * To check:
+ *  - is maxMem and maxCPU value - really disabling the restriction?
  */
 
 
@@ -75,6 +79,9 @@ class Common
     const sidDomainJXcoreAppPortSSL = "jx_domain_app_port_ssl";
     const sidDomainJXcoreAppPath = "jx_domain_app_path";
 
+    // subscription parameters
+    public static $subscriptionParams = null;
+
     const sidDomainJXcoreAppMaxCPULimit = "jxparam_maxCPU";
     const sidDomainJXcoreAppMaxCPUInterval = "jxparam_maxCPUInterval";
     const sidDomainJXcoreAppMaxMemLimit = "jxparam_maxMemory";
@@ -113,13 +120,14 @@ class Common
     private static $monitorJSON = null;
     private static $monitorJSONFetched = false;
 
+    public static $needToReloadNginx = false;
+
     function Common($controller, $status = null)
     {
         self::$controller = $controller;
         self::$status = $status;
         StatusMessage::$status = $status;
 
-        self::clearPorts();
         self::refreshValues();
     }
 
@@ -140,6 +148,7 @@ class Common
      */
     private static function getDomains() {
         if (!self::$domainsFetched) {
+            self::$domains = [];
             // fetching domain list
             $dbAdapter = pm_Bootstrap::getDbAdapter();
             $sql = "SELECT d.*, h.www_root, h.sys_user_id as sysId, u.login as sysLogin, u.home as sysHome
@@ -190,7 +199,6 @@ class Common
         $client = pm_Session::getClient();
         self::$isAdmin = $client->isAdmin();
 
-
         $v = pm_Settings::get(self::sidJXcoreMinimumPortNumber);
         self::$minApplicationPort = $v ? $v : self::minApplicationPort_default;
 
@@ -202,10 +210,19 @@ class Common
         self::$dirSubscriptionConfigs = $varDir . "subs_configs/";
 
         self::$pathSpawner = pm_Context::getVarDir() . "spawner.jx";
-        self::$pathService = pm_Context::getVarDir() . "jxcore_service.jx";
+        self::$pathService = pm_Context::getVarDir() . "service.jx";
 
 //        $takenPorts = self::getTakenAppPorts();
 //        self::$status->addMessage("info", "min = " . self::$minApplicationPort. ", max = ".self::$maxApplicationPort. ". Taken ports: " . join(",", $takenPorts));
+
+        self::$subscriptionParams = array(
+            self::sidDomainJXcoreAppMaxMemLimit => array("disableValue" => "0"),
+            self::sidDomainJXcoreAppMaxCPULimit => array("disableValue" => "0"),
+            self::sidDomainJXcoreAppMaxCPUInterval => array(),
+            self::sidDomainJXcoreAppAllowCustomSocketPort => array(),
+            self::sidDomainJXcoreAppAllowSysExec => array("defaultValue" => 1),
+            self::sidDomainJXcoreAppAllowLocalNativeModules => array("defaultValue" => 1),
+        );
     }
 
 
@@ -223,6 +240,11 @@ class Common
             }
         }
         return self::$monitorJSON;
+    }
+
+    public static function clearMonitorJSON(){
+        self::$monitorJSONFetched = false;
+        self::$monitorJSON = null;
     }
 
     public static function addHR(&$form)
@@ -245,8 +267,21 @@ class Common
         return self::$jxv && self::$jxpath && file_exists(self::$jxpath);
     }
 
+    public static function updateAllConfigsIfNeeded() {
 
-    public static function saveConfig($path = null, $subscriptionId = null) {
+        Common::updateBatchAndCron();
+
+        Common::mkdir(self::$dirSubscriptionConfigs);
+
+        $subs = SubscriptionInfo::getIds();
+        foreach ($subs as $id) {
+            $sub = SubscriptionInfo::getSubscription($id);
+            $sub->updateConfigs();
+        }
+    }
+
+    // saves config for main jx (which will run the monitor)
+    private static function saveConfig($path = null) {
 
         // globalModulePath: string
         // globalApplicationConfigPath
@@ -276,14 +311,6 @@ class Common
                     }';
 
             file_put_contents($dir . "jx.config", $cfg);
-        }
-
-        Common::mkdir(self::$dirSubscriptionConfigs);
-
-        $subs = SubscriptionInfo::getIds();
-        foreach ($subs as $id) {
-            $sub = SubscriptionInfo::getSubscription($id);
-            $sub->saveConfig();
         }
     }
 
@@ -333,7 +360,6 @@ class Common
         Common::mkdir(self::$dirAppsConfigs);
 
         self::refreshValues();
-
         self::saveConfig($path);
     }
 
@@ -442,22 +468,19 @@ class Common
         return $ret;
     }
 
-    //todo: unfinished
     public static function reassignPorts() {
         if (!self::$minApplicationPort || !self::$maxApplicationPort) {
             return;
         }
 
+        self::refreshValues();
         $port = self::$minApplicationPort;
 
-        $rows = self::$domains;
-        foreach ($rows as $id => $domain) {
+        $domains = self::getDomains();
+        foreach ($domains as $domain) {
             $domain->set(Common::sidDomainJXcoreAppPort, $port++);
             $domain->set(Common::sidDomainJXcoreAppPortSSL, $port++);
         }
-
-
-
     }
 
     public static function checkPortRange($domainId = null)
@@ -492,7 +515,7 @@ class Common
     }
 
 
-    public static function updateBatchAndCron($domainId = null)
+    public static function updateBatchAndCron()
     {
         // first we write a batch, which will be executed by cron
         $commands = [];
@@ -514,8 +537,6 @@ class Common
 //                'which a2enmod > /tmp/xxx.txt',
 //                'a2enmod proxy_http >> /tmp/xxx.txt',
 
-                // '/opt/psa/admin/sbin/nginxmng -e',
-
                 'if [ -d /etc/nginx/conf.d ] && [ ! -e /etc/nginx/conf.d/jxcore.conf ]; then',
                 'mkdir /etc/nginx/jxcore.conf.d',
                 'chown psaadm:nginx /etc/nginx/jxcore.conf.d',
@@ -533,87 +554,35 @@ class Common
 
             foreach (self::$domains as $id=>$domain) {
                 $domain = Common::getDomain($id);
-                $sub = $domain->getSubscription();
-
-                if (!$sub) {
-                    self::$status->addMessage("error", "Cannot find subscription for the domain.");
-                    continue;
-                }
+//                $sub = $domain->getSubscription();
+//
+//                if (!$sub) {
+//                    self::$status->addMessage("error", "Cannot find subscription for the domain.");
+//                    continue;
+//                }
 
                 $enabled = $domain->JXcoreSupportEnabled();
                 $path = $domain->getAppPath(true);
 
-                $out = null;
-                $spawner = $domain->getSpawnerPath($out);
-                if ($spawner === false) {
-                    self::$status->addMessage("error", $out);
-                    continue;
-                }
+//                $out = null;
+//                $spawner = $domain->getSpawnerPath($out);
+//                if ($spawner === false) {
+//                    self::$status->addMessage("error", $out);
+//                    continue;
+//                }
+//
+//                $opt = $domain->getSpawnerParams(array("user" => $domain->sysUser, "log" => $domain->appLogPath, "file" => $domain->getAppPath(true),
+//                                "domain" => $domain->name, "tcp" => $domain->getAppPort(), "tcps" => $domain->getAppPort(true), "logWebAccess" => $domain->getAppLogWebAccess() ));
+//                $sub->jxpath . " {$spawner} -opt {$opt}";
 
-                $opt = $domain->getSpawnerParams(array("user" => $domain->sysUser, "log" => $domain->appLogPath, "file" => $path,
-                                "domain" => $domain->name, "tcp" => $domain->getAppPort(), "tcps" => $domain->getAppPort(true), "logWebAccess" => $domain->getAppLogWebAccess() ));
-
-
-
-                $cmd = $sub->jxpath . " {$spawner} -opt {$opt}";
+                $cmd = $domain->getSpawnerCommand();
+                if (!$cmd) continue;
 
                 if ($enabled) {
                     $commands[] = '';
-                    $commands[] = "if [ -e {$spawner} ]; then";
+                    $commands[] = "if [ -e {$domain->getSpawnerPath()} ]; then";
                     $commands[] = $cmd;
                     $commands[] = "fi";
-                }
-
-                // stopping or launching application, if provided with the argument $domainId
-                if ($domainId && intval($domainId) === $id) {
-
-                    $sleep = 3;
-                    $json = self::getMonitorJSON();
-                    $monitorRunning = $json !== null;
-                    $appRunning = strpos($json, $path) !== false;
-
-                    $msg = "";
-                    if (!$enabled && $appRunning) {
-                        // stopping application
-
-                        $nginexconf = "/etc/nginx/jxcore.conf.d/" . $domain->name . ".conf";
-                        if (@file_exists($nginexconf)) {
-                            @unlink($nginexconf);
-                            Common::callService("nginx", "reload", null, "Cannot reload nginx config.");
-                        }
-
-                        $cmd = Common::$jxpath . " monitor kill {$spawner} 2>&1";
-                        @exec($cmd, $out, $ret);
-                        // cannot rely on exitcode, so checking the monitor
-
-//                      abc  Common::getURL(Common::$urlMonitor, $json);
-                        $appRunning = strpos($json, $path) !== false;
-                        if ($appRunning) {
-                            self::$status->addMessage("error", "Cannot stop the application. ". join("\n", $out) . ". Exit code: $ret");
-                        }
-                    } else if ($enabled && !$appRunning) {
-                        // starting application
-                        if (!$monitorRunning) {
-                            // no point to run an application now, if monitor is not running
-                            $cmd = "";
-                            $msg = "Cannot start the application: ";
-                        } else {
-                            // leave $cmd intact - it will start the application
-                            // but enable proxy if its not enabled
-                            self::enableServices();
-
-                            @exec($cmd, $out, $ret);
-                            // cannot rely on exitcode, so checking the monitor
-
-                            $json = self::getMonitorJSON(true);
-                            $appRunning = strpos($json, $path) !== false;
-                            self::$status->addMessage($appRunning ? "info" : "error", $appRunning ? "The application successfully started." : "The application could not be started.");
-                            $cmd = null;
-                            sleep($sleep);
-                        }
-                    } else {
-                        $cmd = null;
-                    }
                 }
             }
 
@@ -767,63 +736,6 @@ class Common
         return $diff;
     }
 
-    public static function updatehtaccess($domainId)
-    {
-        $mgr = new pm_FileManager($domainId);
-        $domain = self::$domains[$domainId];
-
-        $basename = ".htaccess";
-        $file = $domain->rootFolder . $basename;
-
-        $relFile = str_replace($mgr->getFilePath("."), "", $file);
-
-        if ($domain->JXcoreSupportEnabled()) {
-            $htaccess = [];
-            $htaccess[] = 'RewriteEngine On';
-
-            if ($domain->getAppLogWebAccess()) {
-                $htaccess[] = 'RewriteCond %{REQUEST_URI} !/' . $domain->appLogDir;// DomainInfo::appLogBasename;
-            }
-
-//            $tcp = $domain->getAppPort();
-//            $tcps = $domain->getAppPort(true);
-//            $htaccess[] = 'RewriteCond %{SERVER_PORT} 80';
-//            $htaccess[] = 'RewriteRule ^(.*)$ http://0.0.0.0:' . $tcp . '/$1 [P]';
-//            $htaccess[] = 'RewriteRule ^(.*)$ https://0.0.0.0:' . $tcps . '/$1 [P]';
-//            $htaccess[] = 'RewriteRule ^(.*)$ ws://0.0.0.0:' . $tcp . '/$1 [P]';
-//            $htaccess[] = 'RewriteRule ^(.*)$ wss://0.0.0.0:' . $tcps . '/$1 [P]';
-
-            $htaccess[] = 'RewriteCond %{SERVER_PORT} 80';
-            $htaccess[] = 'RewriteRule ^(.*)$ http://0.0.0.0:' . $domain->getAppPort() . '/$1 [P]';
-        } else {
-            $htaccess = [];
-        }
-//var_dump($domain->JXcoreSupportEnabled(), $htaccess);
-        $txt = "";
-
-        if ($mgr->fileExists($relFile)) $txt = $mgr->fileGetContents($relFile);
-
-        $txt = self::saveBlockToText($txt, "JXcore-domainID-" . $domainId, join("\n", $htaccess), null);
-        $txt = trim($txt);
-
-        $mgr->filePutContents($relFile, $txt);
-
-        $txt2 = file_get_contents($file);
-        if ($txt2 !== $txt)
-            return "Cannot save $file";
-
-        return true;
-    }
-
-    public static function testUser()
-    {
-//        $mgr = new pm_FileManager(7);
-//        $mgr->filePutContents("krowa.txt", "krowa");
-//
-//        $ret = file_put_contents("krowa2.txt", "krowa2");
-//        var_dump("written $ret");
-    }
-
     /**
      * Returns Icon representing ON/OFF state (depending of $flag) and displays proper caption.
      * @param $flag
@@ -895,6 +807,10 @@ class Common
         return "<a id=\"$id\" name=\"$id\" class='btn' $onclick $btnstyle>{$icon}{$caption}</a>";
     }
 
+    /**
+     * Generates javascript code for browser, which disables buttons on the form, whenever one of the buttons was clicked.
+     * @return string
+     */
     public static function getButtonsDisablingScript() {
         $arr = [];
         $arr[] = "<script type=\"text/javascript\">";
@@ -911,7 +827,6 @@ class Common
 
     public static function enableServices() {
         self::enableHttpProxy();
-        // moved to startup batch
         self::enableNginx();
     }
 
@@ -949,20 +864,13 @@ class Common
         }
     }
 
-
+    /**
+     * Checks status of nginx (Enabled/Disabled)
+     * @param bool $verbose
+     * @return bool
+     */
     private static function checkNginx($verbose = true)
     {
-//        $json = self::getMonitorJSON();
-//        $monitorRunning = self::getURL(self::$urlMonitor, $json);
-//
-//        if ($json !== null && strpos($json, "jxcore_service.js") !== false) {
-//            $ret = self::callService("nginx", "check", null, null, true);
-//            if (trim($ret) !== 'Enabled') {
-//                self::$status->addMessage('warning', "Nginx is not enabled. $ret");
-//            }
-//        }
-
-//        // this is no use, since psaadm cannot run the command
         $cmd = '/opt/psa/admin/bin/nginxmng -s 2>&1';
         @exec($cmd, $out, $ret);
 
@@ -1015,7 +923,9 @@ class Common
 
         $url = Common::$urlService . "cmd?{$sid}={$arg}";
 
+//        StatusMessage::addDebug("Callservice: $url");
         $ret = Common::getURL($url, $out);
+        $out = htmlspecialchars($out);
         $ok = str_replace("\n", "<br>", trim($out)) == "OK";
         $err = $ret ? $out: "Cannot connect to JXcore service.";
         $msg = $ok ? $msgOK : ($msgErr ? "$msgErr $err" : null);
@@ -1039,7 +949,7 @@ class Common
 
         if ($req == 'restart') {
             // refreshes the config every time monitor is called for restart
-            self::saveConfig();
+            self::updateAllConfigsIfNeeded();
 
             if ($monitorWasRunning) {
                 self::monitorStartStop("stop");
@@ -1069,7 +979,7 @@ class Common
             chdir($cwd);
 
             // let's get a new JSON with next self::getMonitorJSON() call
-            self::$monitorJSONFetched = false;
+            self::clearMonitorJSON();
 
             if ($req === 'stop' && $monitorWasRunning) {
                 // weird exit code on jx monitor stop (8)
@@ -1113,12 +1023,11 @@ class DomainInfo
     private $domain = null;
     private $fileManager = null;
 
-    public $isInitialized = false;
-
     const appLogBasename = "index.txt";
     const appPath_default = "index.js";
 
-    private $sidInitialized = "_domain_initialized";
+    public $configChanged = false;
+    private $appFileNameChanged = false;
 
     public $row = null;
 
@@ -1138,14 +1047,13 @@ class DomainInfo
         return $domain;
     }
 
+    // private constructor
     private function DomainInfo($id)
     {
         $this->domain = new pm_Domain($id);
         $this->fileManager = new pm_FileManager($id);
         $this->id = $id;
         $this->name = $this->domain->getName();
-
-        $this->isInitialized = $this->get($this->sidInitialized) == "true";
     }
 
     public function get($sid) {
@@ -1156,21 +1064,87 @@ class DomainInfo
         return pm_Settings::get($sid . $this->id . "isset") == "true";
     }
 
-
+    /**
+     * Sets param's value
+     * @param $sid
+     * @param $value
+     */
     public function set($sid, $value) {
-        pm_Settings::set($sid . $this->id, $value);
-        pm_Settings::set($sid . $this->id . "isset", "true");
+        $old = $this->get($sid);
+        pm_Settings::set($sid . $this->id, $value === null ? "" : $value);
+        pm_Settings::set($sid . $this->id . "isset", $value === null ? "" : "true");
+
+        $changed = $old != $value;
+//        if ($changed) StatusMessage::addDebug("Changed $sid from $old to $value");
+
+        if ($changed) {
+            $this->configChanged = true;
+            if ($sid == Common::sidDomainJXcoreAppPath)
+                $this->appFileNameChanged = true;
+        }
     }
 
-    public function isAppRunning($json = null)
-    {
-        if (!$json) {
-            $json = Common::getMonitorJSON();
+
+    /**
+     * Gets value defined for config param, or if was not defined - from subscription
+     * @param $sid
+     * @return null
+     */
+    public function getFinalConfigValue($sid) {
+
+        $isCommon = isset(Common::$subscriptionParams[$sid]);
+
+        if (!$isCommon) {
+            return $this->get($sid);
         }
 
-        $path = $this->getSpawnerPath($out);
+        $sub = $this->getSubscription();
 
-        return $path !== false && strpos($json, $path) !== false;
+        $vald = $this->get($sid);
+        $vals = $sub->get($sid);
+
+        $wasSet = $this->wasSet($sid);
+
+        $edits = [Common::sidDomainJXcoreAppMaxMemLimit, Common::sidDomainJXcoreAppMaxCPULimit, Common::sidDomainJXcoreAppMaxCPUInterval];
+        if (in_array($sid, $edits) && !$vald && "$vald" !== "0" )
+            $wasSet = false;
+
+        $ret = null;
+
+        if (!$wasSet && $vals) {
+            $ret = $vals;
+        } else {
+            $ret = $vald;
+        }
+
+        return $ret;
+    }
+
+
+    /**
+     * Asks the monitor if the app si running
+     * @param null $wait - if true, then checking is done in short loop
+     * @return bool
+     */
+    public function isAppRunning($wait = null)
+    {
+        $json = Common::getMonitorJSON();
+        $path = $this->getSpawnerPath();
+
+        $running =  $json !== null && $path !== false && strpos($json, $path) !== false;
+
+        if ($wait) {
+            sleep(2);
+            for($a=1; $a<10; $a++) {
+                Common::clearMonitorJSON();
+                $running = $this->isAppRunning(null);
+                if ($running) break;
+                sleep(1);
+            }
+
+//            StatusMessage::addDebug("Was waiting for $a times");
+        }
+        return $running;
     }
 
     public function getAppStatus()
@@ -1179,8 +1153,7 @@ class DomainInfo
         if (file_exists($p)) {
             $json = Common::getMonitorJSON();
             $monitorRunning = $json !== null;
-//            var_dump($json);
-            $appRunning = $this->isAppRunning($json);
+
             if ($monitorRunning) {
                 $port = $this->getAppPort();
                 if ($port < Common::$minApplicationPort || $port > Common::$maxApplicationPort) {
@@ -1192,7 +1165,7 @@ class DomainInfo
                     $portSSL .= "<br><span style='color: orangered'>TCPS port out of range.</span>";
                 }
 
-                return Common::getIcon($appRunning, "Running on TCP: $port, TCPS: $portSSL", "Not running");
+                return Common::getIcon($this->isAppRunning(), "Running on TCP: $port, TCPS: $portSSL", "Not running");
             } else {
                 $ret = Common::checkCronScheduleStatus(false);
                 $str = ($ret && $ret > 0) ? "<br>Monitor is starting in $ret secs." : "Monitor offline.";
@@ -1205,7 +1178,7 @@ class DomainInfo
 
     public function JXcoreSupportEnabled()
     {
-        return pm_Settings::get(Common::sidDomainJXcoreEnabled . $this->id);
+        return $this->get(Common::sidDomainJXcoreEnabled);
     }
 
     public function getAppPort($ssl = false)
@@ -1312,17 +1285,17 @@ class DomainInfo
      * Copies spawner file for domain, sets it's permissions and returns full parh (or false on error)
      * @return bool|string
      */
-    public function getSpawnerPath(&$out)
+    public function getSpawnerPath()
     {
         $spawnerOrg = Common::$pathSpawner;
         chmod($spawnerOrg, 0644);
         $spawner = pm_Context::getVarDir() . "spawner_{$this->id}.jx";
         if (copy($spawnerOrg, $spawner) === false) {
-            $out = "Cannot copy spawner for application of domain: " . $this->name;
+            StatusMessage::addError("Cannot copy spawner for application of domain {$this->name}.");
             return false;
         }
         if (chmod($spawner, 0644) === false) {
-            $out = "Cannot set permissions for application's spawner of domain: " . $this->name;
+            StatusMessage::addError("Cannot set permissions for application's spawner of domain {$this->name}.");
             return false;
         }
 
@@ -1334,27 +1307,36 @@ class DomainInfo
      * @param $additionalParams
      * @return string
      */
-    public function getSpawnerParams($additionalParams)
+    private function getSpawnerParams()
     {
+        $additionalParams = array(
+            "user" => $this->sysUser,
+            "log" => $this->appLogPath,
+            "file" => $this->getAppPath(true),
+            "domain" => $this->name,
+            "tcp" => $this->getAppPort(),
+            "tcps" => $this->getAppPort(true),
+            "logWebAccess" => $this->getAppLogWebAccess());
+
         $arr = [];
 
-        $params = array(
-            "portTCP" => Common::sidDomainJXcoreAppPort,
-            "portTCPS" => Common::sidDomainJXcoreAppPortSSL,
-            "maxCPU" => Common::sidDomainJXcoreAppMaxCPULimit,
-            "maxCPUInterval" => Common::sidDomainJXcoreAppMaxCPUInterval,
-            "maxMemory" => Common::sidDomainJXcoreAppMaxMemLimit,
-            "allowCustomSocketPort" => Common::sidDomainJXcoreAppAllowCustomSocketPort,
-            "allowSysExec" => Common::sidDomainJXcoreAppAllowSysExec,
-            "allowLocalNativeModules" => Common::sidDomainJXcoreAppAllowLocalNativeModules);
-
-        // as non-strings
-        foreach ($params as $key => $sid) {
-            $val = pm_Settings::get($sid . $this->id);
-            if (trim($val) != "") {
-                $arr[] = "\"{$key}\" : {$val}";
-            }
-        }
+//        $params = array(
+//            "portTCP" => Common::sidDomainJXcoreAppPort,
+//            "portTCPS" => Common::sidDomainJXcoreAppPortSSL,
+//            "maxCPU" => Common::sidDomainJXcoreAppMaxCPULimit,
+//            "maxCPUInterval" => Common::sidDomainJXcoreAppMaxCPUInterval,
+//            "maxMemory" => Common::sidDomainJXcoreAppMaxMemLimit,
+//            "allowCustomSocketPort" => Common::sidDomainJXcoreAppAllowCustomSocketPort,
+//            "allowSysExec" => Common::sidDomainJXcoreAppAllowSysExec,
+//            "allowLocalNativeModules" => Common::sidDomainJXcoreAppAllowLocalNativeModules);
+//
+//        // as non-strings
+//        foreach ($params as $key => $sid) {
+//            $val = pm_Settings::get($sid . $this->id);
+//            if (trim($val) != "") {
+//                $arr[] = "\"{$key}\" : {$val}";
+//            }
+//        }
 
         // as strings
         foreach ($additionalParams as $key => $val) {
@@ -1365,25 +1347,44 @@ class DomainInfo
         return $json;
     }
 
+    /**
+     * Returns command to run a domains spawner, or null
+     * @return null
+     */
+    public function getSpawnerCommand() {
+        $sub = $this->getSubscription();
+        if (!$sub) return null;
+
+        $spawner = $this->getSpawnerPath();
+        if ($spawner === false) return null;
+
+        $opt = $this->getSpawnerParams();
+        return $sub->jxpath . " {$spawner} -opt {$opt}";
+    }
+
     public function clearLogFile()
     {
         if (file_exists($this->appLogPath)) {
             $oldSize = filesize($this->appLogPath);
 
+            $running = $this->isAppRunning();
 
-            $clearlog = $this->appLogDir . "clearlog.txt";
-            $rel = str_replace($this->fileManager->getFilePath("."), "", $clearlog);
-            $this->fileManager->filePutContents($rel, "clear");
+            $ret = false;
+            if ($running) {
+                $clearlog = $this->appLogDir . "clearlog.txt";
+                $rel = str_replace($this->fileManager->getFilePath("."), "", $clearlog);
+                $this->fileManager->filePutContents($rel, "clear");
+                sleep(1);
+                $newSize = filesize($this->appLogPath);
 
+                $ret = $newSize < $oldSize;
+            } else {
+                $out = Common::callService("delete", "applog&path=" .$this->appLogPath, null, null, true);
+                $ret = !file_exists($this->appLogPath);
+//                StatusMessage::addDebug($out);
+            }
 
-//            file_put_contents($clearlog, "");
-            sleep(1);
-//            $fh = fopen($this->appLogPath, 'w' );
-//            fclose($fh);
-
-            $newSize = filesize($this->appLogPath);
-
-            return $newSize < $oldSize;
+            StatusMessage::infoOrError(!$ret, 'Log cleared.', 'Could not clear the log file.');
         }
         return true;
     }
@@ -1403,7 +1404,203 @@ class DomainInfo
             }
         }
 
+        // domain should always have a subscription
+        StatusMessage::addError("Cannot find subscription for domain {$this->name}.");
         return null;
+    }
+
+
+    public function updateConfigs($forceRestart = false) {
+        $this->updateJXConfig();
+        $this->updatehtaccess();
+
+        $running = $this->isAppRunning();
+        $enabled = $this->JXcoreSupportEnabled();
+
+//        StatusMessage::addDebug("Config changed: {$this->configChanged}, enabled: $enabled, running: $running");
+        if ($this->configChanged || $forceRestart) {
+            if ($enabled) {
+                if ($running) {
+                    $this->restartApp();
+                } else {
+                    $this->startApp();
+                }
+            } else {
+                if ($running) {
+                    $this->stopApp();
+                } else {
+                    // do nothing
+                }
+            }
+        }
+    }
+
+    /**
+     * Saves jx.config for the application
+     * @return bool
+     */
+    private function updateJXConfig()
+    {
+        $jxenabled = $this->JXcoreSupportEnabled();
+
+        // base file name for jx.config
+        $bname = $this->getAppPath(true);
+        $bname = str_replace("/", "_", $bname);
+        $bname = str_replace("\\", "_", $bname);
+        $bname = str_replace(":", "_", $bname);
+        $bname .= ".jxcore.config";
+
+        $fname = Common::$dirAppsConfigs . $bname;
+
+        if (!$jxenabled) {
+            @unlink($fname);
+        } else {
+            $params = array(
+                "portTCP" => Common::sidDomainJXcoreAppPort,
+                "portTCPS" => Common::sidDomainJXcoreAppPortSSL,
+                "maxCPU" => Common::sidDomainJXcoreAppMaxCPULimit,
+                "maxCPUInterval" => Common::sidDomainJXcoreAppMaxCPUInterval,
+                "maxMemory" => Common::sidDomainJXcoreAppMaxMemLimit,
+                "allowCustomSocketPort" => Common::sidDomainJXcoreAppAllowCustomSocketPort,
+                "allowSysExec" => Common::sidDomainJXcoreAppAllowSysExec,
+                "allowLocalNativeModules" => Common::sidDomainJXcoreAppAllowLocalNativeModules);
+
+            // as non-strings
+            foreach ($params as $key => $sid) {
+                $val = $this->getFinalConfigValue($sid);
+                if (trim($val) != "") {
+                    $arr[] = "\"{$key}\" : {$val}";
+                }
+            }
+
+            $json = "{ " . join(", ", $arr) . "}";
+
+            $old = @file_get_contents($fname);
+
+//            StatusMessage::addDebug("$fname\nold <br>$old<br><br>new<br>$json<br><br>equeal ? " .($old === $json) );
+
+            if ($old !== $json) {
+                $this->configChanged = true;
+
+                $written = @file_put_contents($fname, $json);
+                if ($written === false) {
+                    StatusMessage::addError("Cannot write config for domain " . $this->name);
+                    @unlink($fname);
+                }
+            }
+        }
+    }
+
+
+    private function updatehtaccess()
+    {
+        $mgr = $this->fileManager;
+
+        $basename = ".htaccess";
+        $file = $this->rootFolder . $basename;
+
+        $relFile = str_replace($mgr->getFilePath("."), "", $file);
+
+        if ($this->JXcoreSupportEnabled()) {
+            $htaccess = [];
+            $htaccess[] = 'RewriteEngine On';
+
+            if ($this->getAppLogWebAccess()) {
+                $htaccess[] = 'RewriteCond %{REQUEST_URI} !/' . $this->appLogDir;// DomainInfo::appLogBasename;
+            }
+
+            $tcp = $this->getAppPort();
+            $tcps = $this->getAppPort(true);
+            $htaccess[] = 'RewriteCond %{SERVER_PORT} 80';
+            $htaccess[] = 'RewriteRule ^(.*)$ http://0.0.0.0:' . $tcp . '/$1 [P]';
+
+            $htaccess[] = 'RewriteCond %{SERVER_PORT} 443';
+            $htaccess[] = 'RewriteRule ^(.*)$ https://0.0.0.0:' . $tcps . '/$1 [P]';
+
+//            $htaccess[] = 'RewriteCond %{SERVER_PORT} 80';
+//            $htaccess[] = 'RewriteRule ^(.*)$ http://0.0.0.0:' . $this->getAppPort() . '/$1 [P]';
+        } else {
+            $htaccess = [];
+        }
+        $txt = "";
+
+        if ($mgr->fileExists($relFile)) $txt = $mgr->fileGetContents($relFile);
+
+        $txt = Common::saveBlockToText($txt, "JXcore-domainID-" . $this->id, join("\n", $htaccess), null);
+        $txt = trim($txt);
+
+        $mgr->filePutContents($relFile, $txt);
+
+        $txt2 = file_get_contents($file);
+        if ($txt2 !== $txt)
+            return "Cannot save $file";
+
+        return true;
+    }
+
+    private function startApp() {
+        $json = Common::getMonitorJSON();
+        $errMsg = "Cannot start the application {$this->name}:";
+
+        // starting application
+        if ($json === null) {
+            // no point to run an application now, if monitor is not running
+            StatusMessage::addError("$errMsg the JXcore monitor is not running.");
+        } else {
+//            self::enableServices();
+            if ($this->isAppRunning()) return;
+
+            $cmd = $this->getSpawnerCommand();
+            if (!$cmd) {
+                StatusMessage::addError("$errMsg invalid spawner command.");
+                return;
+            }
+            @exec($cmd, $out, $ret);
+            // waiting for the app to be restarted by monitor
+            // cannot rely on exitcode, so checking the monitor
+            Common::clearMonitorJSON();
+            $appRunning = $this->isAppRunning(true);
+            StatusMessage::infoOrError(!$appRunning, "The application {$this->name} successfully started.", "The application {$this->name} could not be started.");
+
+            $this->configChanged = false;
+        }
+    }
+
+    private function stopApp() {
+
+        if (!$this->isAppRunning()) return;
+
+        $nginexconf = "/etc/nginx/jxcore.conf.d/" . $this->name . ".conf";
+        if (@file_exists($nginexconf)) {
+            @unlink($nginexconf);
+            Common::callService("nginx", "reload", null, "Cannot reload nginx config.");
+        }
+
+        $cmd = Common::$jxpath . " monitor kill {$this->getSpawnerPath()} 2>&1";
+        @exec($cmd, $out, $ret);
+
+        // cannot rely on exitcode, so checking the monitor
+        Common::clearMonitorJSON();
+        StatusMessage::infoOrError($this->isAppRunning(), "The application {$this->name} successfully stopped.", "Cannot stop the application. ". join("\n", $out) . ". Exit code: $ret");
+        $this->configChanged = false;
+    }
+
+    private function restartApp() {
+        if (!$this->isAppRunning()) {
+            $this->startApp();
+        } else {
+            if ($this->appFileNameChanged) {
+                $this->stopApp();
+                $this->startApp();
+            } else {
+                // faster by killing teh process and letting the monitor to respawn
+                $out = Common::callService("kill", $this->id, null, null, true);
+//            StatusMessage::addDebug($out);
+                Common::clearMonitorJSON();
+                StatusMessage::infoOrError(!$this->isAppRunning(true), "The application {$this->name} was successfully restarted.", "Could not restart the application {$this->name}. $out");
+            }
+            $this->configChanged = false;
+        }
     }
 }
 
@@ -1474,17 +1671,21 @@ class JXconfig {
     public $globalModulePath = null; // string
     public $globalApplicationConfigPath = null; //string
 
-    // accessible by admin:
+    private static function addOrgValue(&$form, $sid, $domainId, $isDomain) {
 
-//    public $maxMemory: long kB
-    // maxCPU: int
-    // allowCustomSocketPort: bool
-    // allowSysExec: bool
-    // allowLocalNativeModules: bool
+        if (!$isDomain) return;
 
+        $domain = Common::getDomain($domainId);
+        $vald = $domain->get($sid);
+
+        $form->addElement('hidden', "{$sid}_org", array(
+            'value' => $vald
+        ));
+    }
 
     private static function check(&$form, $sid, $domainId, $isDomain) {
 
+        return "";
         if (!$isDomain) return;
 
         $domain = Common::getDomain($domainId);
@@ -1519,7 +1720,7 @@ class JXconfig {
     /*
      * Gets value for domain or subscription
      */
-    private static function get($sid, $id, $isDomain = false) {
+    private static function get(&$form, $sid, $id, $isDomain = false) {
 
         if ($isDomain) {
             $domain = Common::getDomain($id);
@@ -1534,11 +1735,18 @@ class JXconfig {
             if (in_array($sid, $edits) && !$vald && "$vald" !== "0" )
                 $wasSet = false;
 
+            $ret = null;
+
             if (!$wasSet && $vals) {
-                return $vals;
+                $ret = $vals;
             } else {
-                return $vald;
+                $ret = $vald;
             }
+
+            $form->addElement('hidden', "{$sid}_org", array(
+                'value' => $ret
+            ));
+            return $ret;
         } else {
             $subscription = SubscriptionInfo::getSubscription($id);
             $val = $subscription->get($sid);
@@ -1575,7 +1783,7 @@ class JXconfig {
 
         $maxInt = array('Int', array("LessThan", true, array('max' => 2147483647)));
 
-        $val = self::get(Common::sidDomainJXcoreAppMaxMemLimit, $id, $isDomain);
+        $val = self::get($form, Common::sidDomainJXcoreAppMaxMemLimit, $id, $isDomain);
         $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxMemLimit : ("field" . ($tmpID++)) , array(
             'label' => 'Maximum memory limit',
             'value' => $canEdit ? $val : ($val ? "$val kB" : "disabled"),
@@ -1586,7 +1794,7 @@ class JXconfig {
         ));
         self::check($form, Common::sidDomainJXcoreAppMaxMemLimit, $id, $isDomain);
 
-        $val = self::get(Common::sidDomainJXcoreAppMaxCPULimit, $id, $isDomain);
+        $val = self::get($form, Common::sidDomainJXcoreAppMaxCPULimit, $id, $isDomain);
         $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxCPULimit : ("field" . ($tmpID++)), array(
             'label' => 'Max CPU',
             'value' => $canEdit ? $val : ($val ? "$val %" : "disabled"),
@@ -1601,7 +1809,7 @@ class JXconfig {
         ));
         self::check($form, Common::sidDomainJXcoreAppMaxCPULimit, $id, $isDomain);
 
-        $val = self::get(Common::sidDomainJXcoreAppMaxCPUInterval, $id, $isDomain);
+        $val = self::get($form, Common::sidDomainJXcoreAppMaxCPUInterval, $id, $isDomain);
         $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxCPUInterval : ("field" . ($tmpID++)), array(
             'label' => 'CPU check interval',
             'value' => $canEdit ? $val : ($val ? "$val seconds" : "default"),
@@ -1617,7 +1825,7 @@ class JXconfig {
         self::check($form, Common::sidDomainJXcoreAppMaxCPUInterval, $id, $isDomain);
 
         $fake = null;
-        $val = self::get(Common::sidDomainJXcoreAppAllowCustomSocketPort, $id, $isDomain);
+        $val = self::get($form, Common::sidDomainJXcoreAppAllowCustomSocketPort, $id, $isDomain);
         $def = self::check($fake, Common::sidDomainJXcoreAppAllowCustomSocketPort, $id, $isDomain);
         $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowCustomSocketPort : ("field" . ($tmpID++)), array(
             'label' => 'Allow custom socket port' ,
@@ -1626,24 +1834,21 @@ class JXconfig {
             "escape" => false
         ));
 
-
-        $val = self::get(Common::sidDomainJXcoreAppAllowSysExec, $id, $isDomain);
+        $val = self::get($form, Common::sidDomainJXcoreAppAllowSysExec, $id, $isDomain);
         $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowSysExec : ("field" . ($tmpID++)), array(
             'label' => 'Allow to spawn/exec child processes',
             'description' => self::check($fake, Common::sidDomainJXcoreAppAllowSysExec, $id, $isDomain),
             'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
         ));
 
-        $val = self::get(Common::sidDomainJXcoreAppAllowLocalNativeModules, $id, $isDomain);
+        $val = self::get($form, Common::sidDomainJXcoreAppAllowLocalNativeModules, $id, $isDomain);
         $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowLocalNativeModules : ("field" . ($tmpID++)), array(
             'label' => 'Allow to call local native modules',
             'description' => self::check($fake, Common::sidDomainJXcoreAppAllowLocalNativeModules, $id, $isDomain),
             'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
         ));
 
-
         if ($isDomain) {
-
             Common::addHR($form);
 
             $domain = Common::getDomain($id);
@@ -1658,102 +1863,31 @@ class JXconfig {
 
     }
 
-}
+    public static function saveDomainValues($form, $domain) {
 
+        $subscription = $domain->getSubscription();
 
-class LogForm {
+        $params = array_keys(Common::$subscriptionParams);
 
-    public static function getForm($controller, $helper, $status, $logPath, $domainId = "")
-    {
-        if (!$domainId) $domainId = "";
-        if ($logPath == "monitor")
+        foreach ($params as $param) {
+            $val_new = $form->getValue($param);
+            $val_org = $form->getValue("{$param}_org");
+            $val_subs = $subscription->get($param);
+            $equalToSub = $val_new === $val_subs;
+            $differentThanBefore = $val_new !== $val_org;
 
-        $form = new pm_Form_Simple();
-        $sidClearLog = "clear_log";
-        $sidLastLinesCount = "last_lines_count";
+//            $str = "$param val_org: $val_org, val_new: $val_new, val_sub = $val_subs, equalToSub: $equalToSub, differentThanBefore: $differentThanBefore";
+//            StatusMessage::addDebug($str);
 
-        $form->addElement('hidden', $sidClearLog, array(
-            'value' => "nothing"
-        ));
-
-        $form->addElement('simpleText', "size", array(
-            'label' => 'Log file size',
-            'value' => filesize($logPath) . " bytes" . Common::getSimpleButton($sidClearLog, "Clear log", "clear", Common::iconUrlDelete, null),
-            'escape' => false
-        ));
-
-        $val = pm_Settings::get($sidLastLinesCount . $domainId);
-        if (!$val && $val !=0) $val = 200;
-        $form->addElement('text', $sidLastLinesCount, array(
-            'label' => 'Show last # lines',
-            'value' => $val,
-            'required' => false,
-            'validators' => array(
-                'Int',
-            ),
-            'description' => 'Displays only last # lines of the log file. Enter 0 to display the whole log.',
-            'escape' => false
-        ));
-
-        $form->addControlButtons(array(
-            'cancelLink' => null,
-            'hideLegend' => true
-        ));
-
-        if ($controller->getRequest()->isPost() && $form->isValid($controller->getRequest()->getPost())) {
-            $actionClearValue = $controller->getRequest()->getParam($sidClearLog);
-            $actionClearPressed = $actionClearValue === "clear";
-
-            $val = $form->getValue($sidLastLinesCount);
-
-            if ($actionClearPressed) {
-
-                if ($domainId && ctype_digit($domainId)) {
-                    $domain = Common::getDomain($domainId);
-                    $ret = $domain->clearLogFile();
-                    if ($ret === false) {
-                        $status->addMessage('error', 'Could not clear the log file.');
-                    } else {
-                        $status->addMessage('info', 'Log cleared.');
-                    }
-
-                } else {
-                    Common::callService("delete", "monitorlogs", "Log cleared.", "Problem: ");
+            if ($equalToSub) {
+                $domain->set($param, null);
+            } else {
+                if ($differentThanBefore) {
+                    $domain->set($param, $val_new);
+                    $domain->configChanged = true;
                 }
-
-            } else {
-                pm_Settings::set($sidLastLinesCount . $domainId, $val);
             }
-            $helper->json(array('redirect' => Common::$urlDomainAppLog));
         }
-
-        //$this->readLog($val);
-        $controller->view->log = self::readLog($logPath, $val);
-
-        $controller->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
-        $controller->view->form = $form;
-    }
-
-
-    private static function readLog($logPath, $tail)
-    {
-        // $this->_status->addMessage("info", "last lines " . $tail);
-        if (file_exists($logPath)) {
-            if (!ctype_digit($tail) || $tail == 0) {
-                $contents = file_get_contents($logPath);
-                $contents = str_replace("\n", "<br>", $contents);
-            } else {
-                $file = file($logPath);
-                $contents = implode("<br>", array_slice($file, -$tail));
-            }
-        } else {
-            $contents = "No log file. " . $logPath;
-        }
-
-        if (trim($contents) === "") {
-            $contents = "The log file is empty.";
-        }
-        return $contents;
     }
 
 }
@@ -1771,6 +1905,8 @@ class SubscriptionInfo {
 
     private static $subscriptions = [];
     private static $fetched = false;
+
+    public $configChanged = false;
 
     private static function getSubscriptions() {
         if (self::$fetched) return;
@@ -1792,6 +1928,91 @@ class SubscriptionInfo {
             self::$subscriptions[intval($sub->id)] = $sub;
         }
         self::$fetched = true;
+    }
+
+
+    /**
+     * marks itself as changed and all belonging domains for restart
+     */
+    private function invalidate()
+    {
+        if (!$this->configChanged) {
+            $domains = $this->getDomains();
+            foreach ($domains as $d) {
+                $d->configChanged = true;
+            }
+            $this->configChanged = true;
+        }
+    }
+
+    /**
+     * Saves jx.config for subscription. Does not save all of the params (common for domains)
+     * since each domain will save them for itself.
+     */
+    private function updateJXConfig() {
+
+        // globalModulePath: string
+        // globalApplicationConfigPath
+
+        // accessible by admin:
+
+        // maxMemory: long kB
+        // maxCPU: int
+        // allowCustomSocketPort: bool
+        // allowSysExec: bool
+        // allowLocalNativeModules: bool
+
+        if (!Common::mkdir($this->jxdir)) {
+            StatusMessage::addError("Could not create directory for subscription jx: " . $this->jxdir);
+        }
+
+        if (!file_exists($this->jxpath)) {
+            copy(Common::$jxpath, $this->jxpath);
+            // rx for all
+            chmod($this->jxpath, 0555);
+        }
+
+        if (file_exists($this->jxpath)) {
+
+            $cfg = '{
+                       "monitor" :
+                       {
+                           "log_path" : "' . $this->jxdir . 'jx_monitor_[WEEKOFYEAR]_[YEAR].log",
+                           "users": [ "psaadm" ]
+                       },
+                       "globalModulePath" : "' . Common::$dirNativeModules . '",
+                       "globalApplicationConfigPath" : "' . Common::$dirAppsConfigs . '",
+                       "npmjxPath" : "' . dirname(Common::$jxpath) . '"';
+
+//            $params = [
+//                Common::sidDomainJXcoreAppMaxCPULimit,
+//                Common::sidDomainJXcoreAppMaxCPUInterval,
+//                Common::sidDomainJXcoreAppMaxMemLimit,
+//                Common::sidDomainJXcoreAppAllowCustomSocketPort,
+//                Common::sidDomainJXcoreAppAllowSysExec,
+//                Common::sidDomainJXcoreAppAllowLocalNativeModules
+//            ];
+//
+//            foreach ($params as $param) {
+//                $val = $this->get($param);
+//                if ($val) {
+//                    $sid = str_replace("jxparam_", "", $param);
+//                    $cfg .= ",\n" . '"'. $sid.'" : ' . $val;
+//                }
+//            }
+
+            $cfg .= '}';
+
+            $fname = $this->jxdir . "jx.config";
+            $old = file_get_contents($fname);
+
+            if ($old !== $cfg) {
+                $this->invalidate();
+                $ret = file_put_contents($fname, $cfg);
+                if (!$ret)
+                    StatusMessage::addError("Could not save jx.config for subscription " . $this->mainDomain->name);
+            }
+        }
     }
 
     /**
@@ -1817,65 +2038,16 @@ class SubscriptionInfo {
             return null;
     }
 
-    public function saveConfig() {
 
-        // globalModulePath: string
-        // globalApplicationConfigPath
+    /**
+     * Updates jx.config for the subscription and all configs for all domains belonging to it
+     */
+    public function updateConfigs() {
+        $this->updateJXConfig();
 
-        // accessible by admin:
-
-        // maxMemory: long kB
-        // maxCPU: int
-        // allowCustomSocketPort: bool
-        // allowSysExec: bool
-        // allowLocalNativeModules: bool
-
-
-
-        if (!Common::mkdir($this->jxdir)) {
-            StatusMessage::addError("Could not create directory for subscription jx: " . $this->jxdir);
-        }
-
-        if (!file_exists($this->jxpath)) {
-            copy(Common::$jxpath, $this->jxpath);
-            // rx for all
-            chmod($this->jxpath, 0555);
-        }
-
-        if (file_exists($this->jxpath)) {
-
-            $cfg = '{
-                       "monitor" :
-                       {
-                           "log_path" : "' . $this->jxdir . 'jx_monitor_[WEEKOFYEAR]_[YEAR].log",
-                           "users": [ "psaadm" ]
-                       },
-                       "globalModulePath" : "' . Common::$dirNativeModules . '",
-                       "globalApplicationConfigPath" : "' . Common::$dirAppsConfigs . '",
-                       "npmjxPath" : "' . dirname(Common::$jxpath) . '"';
-
-            $params = [
-                Common::sidDomainJXcoreAppMaxCPULimit,
-                Common::sidDomainJXcoreAppMaxCPUInterval,
-                Common::sidDomainJXcoreAppMaxMemLimit,
-                Common::sidDomainJXcoreAppAllowCustomSocketPort,
-                Common::sidDomainJXcoreAppAllowSysExec,
-                Common::sidDomainJXcoreAppAllowLocalNativeModules
-            ];
-
-            foreach ($params as $param) {
-                $val = $this->get($param);
-                if ($val) {
-                    $sid = str_replace("jxparam_", "", $param);
-                    $cfg .= ",\n" . '"'. $sid.'" : ' . $val;
-                }
-            }
-
-            $cfg .= '}';
-
-            $ret = file_put_contents($this->jxdir . "jx.config", $cfg);
-            if (!$ret)
-                StatusMessage::addError("Could not save jx.config for subscription " . $this->mainDomain-name);
+        $domains = $this->getDomains();
+        foreach ($domains as $d) {
+            $d->updateConfigs();
         }
     }
 
@@ -1886,24 +2058,24 @@ class SubscriptionInfo {
         $defaults[Common::sidDomainJXcoreAppAllowSysExec] = 1;
         $defaults[Common::sidDomainJXcoreAppAllowLocalNativeModules] = 1;
 
-        if ($wasSet && !isset($defaults[$sid]))
-            return pm_Settings::get($sid . $this->sid);
-        else
+        if (!$wasSet && isset($defaults[$sid]))
             return $defaults[$sid];
+        else
+            return pm_Settings::get($sid . $this->sid);
     }
 
     /**
      * Sets param's value
      * @param $sid
      * @param $value
-     * @return bool - true if value has been changed, false otherwise.
      */
     public function set($sid, $value) {
         $old = $this->get($sid);
         pm_Settings::set($sid . $this->sid, $value);
         pm_Settings::set($sid . $this->sid . "isset", "true");
 
-        return $old != $value;
+        $changed = $old != $value;
+        if ($changed) $this->invalidate();
     }
 
     public function wasSet($sid) {
@@ -1934,10 +2106,19 @@ class StatusMessage {
     public static $status = null;
 
     public static function addError($err) {
-        self::$status->addMessage("error", $err);
+        self::$status->addMessage('error', $err);
     }
 
     public static function addDebug($txt) {
-        self::$status->addMessage("warning", $txt);
+        $txt = str_replace("\n", "<br>", $txt);
+        self::$status->addMessage('warning', $txt);
+    }
+
+    public static function dataSavedOrNot($saved) {
+        self::$status->addMessage('info', $saved ? 'Data was successfully saved.' : 'Nothing to save.');
+    }
+
+    public static function infoOrError($isError, $infoMsg, $errMsg) {
+        self::$status->addMessage($isError ? 'error' : 'info', $isError ? $errMsg : $infoMsg);
     }
 }

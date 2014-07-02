@@ -11,8 +11,13 @@ $binary = "/opt/psa/admin/bin/crontabmng";
 $tmpfile = pm_Context::getVarDir() . "mycron";
 @exec("$binary get root > $tmpfile");
 $contents = file_get_contents($tmpfile);
-$contents = preg_replace('/(#JXcore_Begin\\n)(.*)(\\n#JXcore_End)/si', '', $contents);
+//$contents = preg_replace('/(#JXcore_Begin\\n)(.*)(\\n#JXcore_End)/si', '', $contents);
+//$contents = preg_replace('/(#JXcore-immediate-Begin\\n)(.*)(\\n#JXcore-immediate-Begin)/si', '', $contents);
 
+$contents = preg_replace('/(#JXcore_Begin)(.*)(#JXcore_End)/si', '', $contents);
+$contents = preg_replace('/(#JXcore-immediate-Begin)(.*)(#JXcore-immediate-End)/si', '', $contents);
+
+// cleaning crontab
 if (trim($contents) === "") {
     @exec("$binary remove root");
 } else {
@@ -54,7 +59,10 @@ try {
 
 } catch(PleskAPIParseException $e) {
     echo $e->getMessage() . "\n";
-    echo "The id is: $id";
-    // todo: fix this
-    exit(1);
+    echo "Just the debug. Uninstalling jxcore extension in pre-uninstall.php: The id is: $id";
+
+    pm_Bootstrap::init();
+    pm_Bootstrap::getDbAdapter()->delete('custom_buttons', array("url like '%jxcore_support%'"));
+
+    exit(0);
 }

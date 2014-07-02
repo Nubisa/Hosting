@@ -8,10 +8,8 @@ class DomainController extends pm_Controller_Action
     {
         parent::init();
 
-        // Init title for all actions
         $this->view->pageTitle = 'JXcore - single domain configuration';
 
-        // Init tabs for all actions
         $this->view->tabs = array(
             array(
                 'title' => 'Configuration',
@@ -58,12 +56,11 @@ class DomainController extends pm_Controller_Action
     {
         $json = Common::getMonitorJSON();
         $monitorRunning = $json !== null;
-        $appRunning = $this->domain->isAppRunning($json);
+        $appRunning = $this->domain->isAppRunning();
         $canEdit = Common::$isAdmin;
 
         $sidRestart = "restart";
 
-        // Init form here
         $form = new pm_Form_Simple();
 
         $jxEnabled = $this->domain->JXcoreSupportEnabled();
@@ -96,36 +93,6 @@ class DomainController extends pm_Controller_Action
             'description' => $description
         ));
 
-
-//        if ($canEnable !== true) {
-//            $form->addElement('simpleText', 'statuserr', array(
-//                'label' => '',
-//                'escape' => false,
-//                'value' => "Cannot enable JXcore: $canEnable",
-////                'description' => $description
-//            ));
-//        }
-
-//        Common::addHR($form);
-//
-//        $form->addElement('checkbox', Common::sidDomainAppLogWebAccess, array(
-//            'label' => 'Application\'s log web access',
-//            'description' => "Will be available from <a target=\'_blank\' href=\'http://" . $this->domain->name . "/index.txt\'>http://" . $this->domain->name . "/index.txt</a>" . DomainInfo::appLogBasename,
-//            'value' => $this->domain->getAppLogWebAccess()
-//        ));
-
-
-//        if (!$canEdit && Common::$isAdmin) {
-//            Common::addHR($form);
-//            $form->addElement('simpleText', "cannotedit", array(
-//                'label' => '',
-//                'escape' => false,
-//                'value' => "<span style='color: red;'>Options below can be changed only when application is not running (JXcore support is disabled).</span>",
-//                'description' => $jxEnabled ? "" : "Application will start automatically when JXcore support is enabled."
-//            ));
-//        }
-
-
         Common::addHR($form);
 
         $form->addElement('simpleText', "txt1", array(
@@ -157,53 +124,6 @@ class DomainController extends pm_Controller_Action
 
         JXconfig::addConfigToForm($form, $this->ID, true);
 
-//        Common::addHR($form);
-//
-//        $validator = new MyValid_NumericBetween();
-//        $validator->domainId = $this->ID;
-//        $validator->ssl = false;
-//        $validator->otherValue = $this->getRequest()->getParam(Common::sidDomainJXcoreAppPortSSL);
-//
-//
-//        $form->addElement($canEdit && Common::$isAdmin ? 'text' : 'simpleText', Common::sidDomainJXcoreAppPort, array(
-//            'label' => 'Application\'s TCP port',
-//            'value' => $this->domain->getAppPortOrDefault(),
-//            'required' => true,
-//            'validators' => array(
-//                'Int',
-//                $validator
-//            ),
-//            'description' => 'TCP port on which JXcore application is allowed to run.',
-//            'escape' => false
-//        ));
-//
-//        $validator2 = new MyValid_NumericBetween();
-//        $validator2->domainId = $this->ID;
-//        $validator2->ssl = true;
-//        $validator2->otherValue = $this->getRequest()->getParam(Common::sidDomainJXcoreAppPort);
-//
-//        $form->addElement($canEdit && Common::$isAdmin ? 'text' : 'simpleText', Common::sidDomainJXcoreAppPortSSL, array(
-//            'label' => 'Application\'s TCPS port',
-//            'value' => $this->domain->getAppPortOrDefault(false, true),
-//            'required' => true,
-//            'validators' => array(
-//                'Int',
-//                $validator2
-//            ),
-//            'description' => 'TCP Secure port on which JXcore application is allowed to run.',
-//            'escape' => false
-//        ));
-
-//        $form->addElement('simpleText', "portrange", array(
-//            'label' => 'Available ports range',
-//            'value' => Common::$minApplicationPort . " - " . Common::$maxApplicationPort,
-//            'description' => "First five available ports: " . join(", ", Common::getFreePorts(null)),
-//            'escape' => false
-//        ));
-
-//        Common::addHR($form);
-
-
         if ($canEdit && $appRunning) {
             Common::addHR($form);
             $form->addElement('simpleText', "someWarning", array(
@@ -231,59 +151,29 @@ class DomainController extends pm_Controller_Action
             $actionRestartPressed = $restartActionValue === "restart";
 
             if ($actionButtonPressed) {
-                pm_Settings::set(Common::sidDomainJXcoreEnabled . $this->ID, $actionValue == "start" ? 1 : 0);
+                $this->domain->set(Common::sidDomainJXcoreEnabled, $actionValue == "start" ? 1 : 0);
             } else
+                if (!$actionButtonPressed && !$actionRestartPressed && $canEdit) {
 
-            if (!$actionButtonPressed && !$actionRestartPressed) {
+                    $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess];
 
-                $params = [];
-            if ($canEdit && Common::$isAdmin) {
-                $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess,
-                    Common::sidDomainJXcoreAppMaxCPULimit,
-                    Common::sidDomainJXcoreAppMaxCPUInterval,
-                    Common::sidDomainJXcoreAppMaxMemLimit,
-                    Common::sidDomainJXcoreAppAllowCustomSocketPort,
-                    Common::sidDomainJXcoreAppAllowSysExec,
-                    Common::sidDomainJXcoreAppAllowLocalNativeModules
-                    //  Common::sidDomainJXcoreAppAllowSpawnChild
-                ];
+                    foreach ($params as $param) {
+                        $this->domain->set($param, $form->getValue($param));
+                    }
 
-            }
-
-            $changed = false;
-            foreach ($params as $param) {
-                $val = $form->getValue($param);
-//                $this->_status->addMessage('warning', "val of $param = $val.");
-
-                if (pm_Settings::get($param . $this->ID) !== $val) {
-                    $changed = true;
+                    JXconfig::saveDomainValues($form, $this->domain);
+                    StatusMessage::dataSavedOrNot($this->domain->configChanged);
                 }
-//                pm_Settings::set($param . $this->ID, $form->getValue($param));
-
-                $this->domain->set($param, $val);
-//                    $this->_status->addMessage("info", "$param = " . $form->getValue($param));
-            }
-            $this->_status->addMessage('info', 'Data was successfully saved.');
-
-            }
 
 
             if (!file_exists($this->domain->getAppPath(true))) {
                 $this->_status->addMessage('warning', 'Application file does not exist on filesystem: ' . $this->domain->getAppPath());
             }
 
-//            $this->_status->addMessage("info", "actionRestartPressed = $actionRestartPressed, changed = $changed");
-            if ($appRunning && ($actionRestartPressed || $changed)) {
-                $cmd = Common::$jxpath . " monitor kill " . $this->domain->getSpawnerPath() . " 2>&1";
-                @exec($cmd, $out, $ret);
-                if ($ret && $ret != 77) {
-                    $this->_status->addMessage($ret ? "error" : "info", "Cannot stop the application: " . join("\n", $out) . ". Exit code: $ret");
-                }
+            if ($actionRestartPressed) {
+                $this->domain->configChanged = true;
             }
-
-            Common::updateBatchAndCron($this->ID);
-            $ret = Common::updatehtaccess($this->ID);
-            if ($ret !== true) $this->_status->addMessage('error', $ret);
+            Common::updateAllConfigsIfNeeded();
 
             $this->_helper->json(array('redirect' => Common::$urlDomainConfig));
         }
@@ -292,14 +182,8 @@ class DomainController extends pm_Controller_Action
         $this->view->form = $form;
     }
 
-
-
-
-
     public function logAction()
     {
-        //LogForm::getForm($this, $this->_helper, $this->_status, $this->domain->appLogPath, $this->ID);return;
-
         $form = new pm_Form_Simple();
         $sidClearLog = "clear_log";
         $sidLastLinesCount = "last_lines_count";
@@ -339,12 +223,7 @@ class DomainController extends pm_Controller_Action
             $val = $form->getValue($sidLastLinesCount);
 
             if ($actionClearPressed) {
-                $ret = $this->domain->clearLogFile();
-                if ($ret === false) {
-                    $this->_status->addMessage('error', 'Could not clear the log file.');
-                } else {
-                    $this->_status->addMessage('info', 'Log cleared.');
-                }
+                $this->domain->clearLogFile();
             } else {
                 pm_Settings::set($sidLastLinesCount . $this->ID, $val);
             }
@@ -397,24 +276,6 @@ class DomainController extends pm_Controller_Action
             'escape' => false
         ));
 
-//        $val = pm_Settings::get($sidLastLinesCount . $this->ID);
-//        if (!$val) $val = 200;
-//        $form->addElement('text', $sidLastLinesCount, array(
-//            'label' => 'Show last # lines',
-//            'value' => $val,
-//            'required' => true,
-//            'validators' => array(
-//                'Int',
-//            ),
-//            'description' => 'Displays only last # lines of the log file. Enter 0 to display the whole log.',
-//            'escape' => false
-//        ));
-//
-//        $form->addControlButtons(array(
-//            'cancelLink' => null,
-//            'hideLegend' => true
-//        ));
-
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
             $actionGhostValue = $this->getRequest()->getParam($sidGhostBlogging);
             $actionGhostPressed = in_array($actionGhostValue, ["start", "stop"]);
@@ -439,76 +300,6 @@ class DomainController extends pm_Controller_Action
     }
 
 }
-
-
-class MyValid_NumericBetween extends Zend_Validate_Abstract
-{
-    const MSG_MINIMUM = 'msgMinimum';
-    const MSG_MAXIMUM = 'msgMaximum';
-    const MSG_BUSY = "msgBusy";
-    const MSG_DIFFERENT = "msgDifferent";
-
-    public $minimum = 0;
-    public $maximum = 0;
-    public $free = "";
-
-    protected $_messageVariables = array(
-        'min' => 'minimum',
-        'max' => 'maximum',
-        'free' => 'free'
-    );
-
-    protected $_messageTemplates = array(
-        self::MSG_MINIMUM => "'%value%' must be at least '%min%'",
-        self::MSG_MAXIMUM => "'%value%' must be no more than '%max%'",
-        self::MSG_BUSY => "'%value%' is already taken. %free%'",
-        self::MSG_DIFFERENT => "TCP and TCPS port values cannot have the same values"
-    );
-
-    public function isValid($value)
-    {
-        $this->minimum = Common::$minApplicationPort;
-        $this->maximum = Common::$maxApplicationPort;
-
-        $this->_setValue($value);
-
-
-        if ($value < $this->minimum) {
-            $this->_error(self::MSG_MINIMUM);
-            return false;
-        }
-
-        if ($value > $this->maximum) {
-            $this->_error(self::MSG_MAXIMUM);
-            return false;
-        }
-
-        if ($value == $this->otherValue) {
-            $this->_error(self::MSG_DIFFERENT);
-            return false;
-        }
-
-        $takenPorts = Common::getTakenAppPorts($this->domainId, $this->ssl);
-
-        if (in_array($value, $takenPorts)) {
-            $freePorts = Common::getFreePortsFromTaken($takenPorts);
-
-            if(($key = array_search($this->otherValue, $freePorts)) !== false) {
-                unset($freePorts[$key]);
-            }
-
-            $this->free = "Try one of the following: " . join(", ", $freePorts);
-            $this->_error(self::MSG_BUSY);
-            return false;
-        }
-
-        return true;
-    }
-}
-
-
-
-
 
 class MyValid_FileName extends Zend_Validate_Abstract
 {

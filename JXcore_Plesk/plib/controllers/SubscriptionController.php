@@ -51,7 +51,7 @@ class SubscriptionController extends pm_Controller_Action
             $form->addElement('simpleText', "restartmayoccur", array(
                 'label' => '',
                 'escape' => false,
-                'value' => "<span style='color: red;'>Submitting the form will may result in restarting the monitor together with all of the applications.</span>",
+                'value' => "<span style='color: red;'>Submitting the form will may result in restarting applications belonging to this subscription.</span>",
                 'description' => ""
             ));
         }
@@ -75,18 +75,16 @@ class SubscriptionController extends pm_Controller_Action
                 Common::sidDomainJXcoreAppAllowLocalNativeModules
             ];
 
-            $changed = false;
             foreach ($params as $param) {
-                $val = $form->getValue($param);
-
-                if ($this->subscription->set($param, $val))
-                    $changed = true;
+                $this->subscription->set($param, $form->getValue($param));
             }
-            $this->_status->addMessage('info', 'Data was successfully saved.');
 
-            if ($changed && $monitorRunning) {
-//                $this->subscription->saveConfig();
-                Common::monitorStartStop('restart');
+            StatusMessage::dataSavedOrNot($this->subscription->configChanged);
+
+            if ($monitorRunning && $this->subscription->configChanged) {
+                $this->subscription->updateConfigs();
+//                Common::callService("kill", -1, "Applications were restarted.", "Could not restart all of the applications.");
+//                Common::monitorStartStop('restart');
             }
 
             $this->_helper->json(array('redirect' => Common::$urlJXcoreSubscriptions));

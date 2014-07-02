@@ -15,6 +15,39 @@ if (!jxconfig) {
     console.log("Cannot read jxconfig.");
 }
 
+
+var writeAnswer = function (res, answer) {
+    res.writeHead(200, {'Content-Type': 'text/plain'});
+    res.end(answer ? answer : "Unknown command.");
+};
+
+
+var getMonitorJSON = function (cb) {
+    if (!cb) {
+        return;
+    }
+
+    http.get("http://localhost:17777/json?silent=true",function (res) {
+        var body = "";
+
+        res.on('data', function (chunk) {
+            body += chunk;
+        });
+
+        res.on('end', function () {
+            try {
+                var json = JSON.parse(body);
+                cb(false, json);
+            } catch (ex) {
+                cb(true, "Cannot parse json: " + ex);
+            }
+        });
+    }).on('error', function (e) {
+        cb(true, e.toString())
+    });
+};
+
+
 var srv = http.createServer(function (req, res) {
 
     var parsed = url.parse(req.url, true);
@@ -41,8 +74,7 @@ var srv = http.createServer(function (req, res) {
             var expectedModulePath = path.join(jxconfig.globalModulePath, "/node_modules/", name);
             var answer = fs.existsSync(expectedModulePath) ? "OK" : ret.out;
 
-            res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.end(answer);
+            writeAnswer(res, answer);
             return;
         }
 
@@ -61,8 +93,7 @@ var srv = http.createServer(function (req, res) {
                 answer = ex.toString()
             }
 
-            res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.end(answer);
+            writeAnswer(res, answer);
             return;
         }
 
@@ -93,8 +124,7 @@ var srv = http.createServer(function (req, res) {
                 answer = ex.toString();
             }
 
-            res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.end(answer);
+            writeAnswer(res, answer);
             return;
         }
 
@@ -104,8 +134,7 @@ var srv = http.createServer(function (req, res) {
             var answer = null;
             if (parsed.query.nginx == "reload") {
                 cmd = "/etc/init.d/nginx reload";
-            } else
-            if (parsed.query.nginx == "start") {
+            } else if (parsed.query.nginx == "start") {
                 cmd = "/opt/psa/admin/sbin/nginxmng -e";
             }
             if (parsed.query.nginx == "check") {
@@ -122,9 +151,7 @@ var srv = http.createServer(function (req, res) {
                     answer = "Unknown command.";
             }
 
-            res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.end(answer);
-
+            writeAnswer(res, answer);
             return;
         }
 
@@ -148,16 +175,74 @@ var srv = http.createServer(function (req, res) {
                     answer = ex.toString()
                 }
 
-                res.writeHead(200, {'Content-Type': 'text/plain'});
-                res.end(answer);
+                writeAnswer(res, answer);
+                return;
+            }
+
+
+            if (parsed.query.delete == "applog" && parsed.query.path) {
+                try {
+                    if (fs.existsSync(parsed.query.path)) {
+                        fs.unlinkSync(parsed.query.path);
+                    }
+                    writeAnswer(res, 'OK');
+                } catch(ex) {
+                    writeAnswer(res, "Cannot delete log file: " + ex);
+                }
+                return;
+            }
+        }
+
+        if (parsed.query.kill) {
+            var id = parseInt(parsed.query.kill);
+            var answer = null;
+            if (isNaN(id)) {
+                writeAnswer(res, "Unknown id.");
+            } else {
+                var fname = "spawner_" + id + ".jx";
+                var killAll = (id == -1);
+                var error = false;
+
+                getMonitorJSON(function (err, json) {
+                    if (err) {
+                        writeAnswer(res, "Error while connecting to the monitor: " + json);
+                    } else {
+                        for (var pid in json) {
+                            var info = json[pid];
+                            if (info.path && (info.path.indexOf(fname) > -1 || killAll) ) {
+
+                                // dont kill itself
+                                if (info.pid === process.pid) {
+                                    continue;
+                                }
+
+                                try {
+//                                    console.log("Killing " + info.pid);
+//                                    console.log(info);
+                                    process.kill(info.pid);
+
+                                    if (!killAll) writeAnswer(res, "OK");
+                                } catch (ex) {
+                                    error = true;
+                                    if (!killAll) writeAnswer(res, "Could not kill the application " + fname);
+                                }
+
+                                if (!killAll) return;
+                            }
+                        }
+
+                        if (killAll) {
+                            writeAnswer(res, error ? "Some of the applications were not killed." : "OK");
+                        } else {
+                            writeAnswer(res, "The application " + fname + " is not monitored or is not running.");
+                        }
+                    }
+                });
             }
             return;
         }
 
-
-        res.writeHead(200, {'Content-Type': 'text/plain'});
-        res.end("Unknown command.");
-
+        writeAnswer(res);
     }
 });
 

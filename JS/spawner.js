@@ -20,7 +20,9 @@ var log = function (str, error) {
     if (!logPath) return;
 
     //if (isRoot) {
-    fs.appendFileSync(logPath, str + os.EOL);
+    if (fs.existsSync(logPath)) {
+        fs.appendFileSync(logPath, str + os.EOL);
+    }
     //} //else {
 //        console.log(str);
     //}
@@ -190,20 +192,20 @@ if (!isRoot || !respawned) {
     delete options.logWebAccess;
 
     // default path for app config
-    var configFile = file + ".jxcore.config";
-    var configFileIsDefault = true;
-    var jxconfig = root_functions.readJXconfig();
-//    log("config read: " + JSON.stringify(jxconfig));
-    if (jxconfig && jxconfig.globalApplicationConfigPath) {
-        var base = file.replace(/[\/]/g, "_").replace(/[\\]/g, "_").replace(/:/g, "_") + ".jxcore.config";
-        // assuming, that folder exists (it's created by php)
-        if (fs.existsSync(jxconfig.globalApplicationConfigPath)) {
-            configFile = path.join(jxconfig.globalApplicationConfigPath, "/", base);
-            configFileIsDefault = false;
-        }
-    }
-//    log("app cfg file: " + configFile);
-    fs.writeFileSync(configFile, JSON.stringify(options));
+//    var configFile = file + ".jxcore.config";
+//    var configFileIsDefault = true;
+//    var jxconfig = root_functions.readJXconfig();
+////    log("config read: " + JSON.stringify(jxconfig));
+//    if (jxconfig && jxconfig.globalApplicationConfigPath) {
+//        var base = file.replace(/[\/]/g, "_").replace(/[\\]/g, "_").replace(/:/g, "_") + ".jxcore.config";
+//        // assuming, that folder exists (it's created by php)
+//        if (fs.existsSync(jxconfig.globalApplicationConfigPath)) {
+//            configFile = path.join(jxconfig.globalApplicationConfigPath, "/", base);
+//            configFileIsDefault = false;
+//        }
+//    }
+////    log("app cfg file: " + configFile);
+//    fs.writeFileSync(configFile, JSON.stringify(options));
 
     // this can be done only by privileged user.
     // node throws exception otherwise
@@ -232,12 +234,12 @@ if (!isRoot || !respawned) {
         } else {
             log("Subscribed successfully: " + txt);
 
-            // deleting config file
-            try {
-                if (configFileIsDefault) fs.unlinkSync(configFile);
-            } catch (ex) {
-                log("Cannot delete config file: " + ex);
-            }
+//            // deleting config file
+//            try {
+//                if (configFileIsDefault) fs.unlinkSync(configFile);
+//            } catch (ex) {
+//                log("Cannot delete config file: " + ex);
+//            }
 
             root_functions.watch(path.dirname(file), logPathDir, function (param) {
 

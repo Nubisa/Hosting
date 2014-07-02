@@ -78,7 +78,7 @@ class DebugController extends pm_Controller_Action
         // var contents
         Common::addHR($form);
         $this->addText($form, "pm_Context::getVarDir()", pm_Context::getVarDir());
-        $this->addText($form, "Batch", file_get_contents(Common::$startupBatchPath));
+//        $this->addText($form, "Batch", file_get_contents(Common::$startupBatchPath));
 
 
         Common::addHR($form);
@@ -129,11 +129,48 @@ class DebugController extends pm_Controller_Action
 //        $sub1 = $d1->getSubscription();
 //        var_dump($sub1);
 
-        Common::addHR($form);
-        $this->addText($form, "Client id", $clid);
+//        Common::addHR($form);
+//        $this->addText($form, "Client id", $clid);
+
+
+        $domain = Common::getDomain(7);
+
+
 
 //
+
+
+        $binary = "/opt/psa/admin/bin/crontabmng";
+
+        $tmpfile = pm_Context::getVarDir() . "mycron";
+        @exec("$binary get root > $tmpfile");
+        $contents = file_get_contents($tmpfile);
+//$contents = preg_replace('/(#JXcore_Begin\\n)(.*)(\\n#JXcore_End)/si', '', $contents);
+//$contents = preg_replace('/(#JXcore-immediate-Begin\\n)(.*)(\\n#JXcore-immediate-Begin)/si', '', $contents);
+
+        $this->addText($form, "crontab before", $contents);
+
+
+        $contents = preg_replace('/(#JXcore_Begin)(.*)(#JXcore_End)/si', '$1 sss $2', $contents);
+        $this->addText($form, "crontab after", $contents);
+
+
+//        $contents = preg_replace('/(#JXcore-immediate-Begin)(.*)(#JXcore-immediate-End)/si', '', $contents);
+        // cleaning crontab
+        if (trim($contents) === "") {
+            @exec("$binary remove root");
+        } else {
+            file_put_contents($tmpfile, $contents);
+            @exec("$binary set root $tmpfile");
+        }
+
+        $this->addText($form, "crontab before", pm_Context::getVarDir());
+
+
+
         $this->view->form = $form;
+
+
     }
 
 }
