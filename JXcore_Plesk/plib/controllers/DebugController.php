@@ -111,10 +111,11 @@ class DebugController extends pm_Controller_Action
         $this->addText($form, "crontab before", pm_Context::getVarDir());
 
 
-
         $this->view->form = $form;
 
-
+        $this->_status->addMessage("info", "Some message");
+        $this->_status->addMessage("warning", "Some warning");
+        $this->_status->addMessage("error", "Some error");
     }
 
 }
