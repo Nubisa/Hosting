@@ -4,8 +4,6 @@
  * todo:
  * when uploading and app file, after forced exception - it does not restart
  *
- * domain config panel:
- *      on textboxes, when user clears the textbox - display info about global value used
  *
  * on uninstall:
  *      removing nginx configs for jxcore + reload nginx
@@ -660,26 +658,39 @@ class Common
         if ($diff > 0) {
 
             if ($addMessage) {
-                // $waitSeconds = 10;
-                $waitSeconds = $diff + 10;
-                $refresh = '<script type="text/javascript">var cnt = ' . $waitSeconds
-                . '; '
-                . 'if(cnt>0){'
-                . '  setTimeout(function(){'
-                . '    var elm = document.getElementById("content");'
-                . '    var msg = document.createElement("div");'
-                . '    msg.id = "__waitjx"; msg.name = "__waitjx";'
-                . '    msg.innerHTML = "Please wait for JXcore to complete installation.. <style> .clearfix{display:none} </style>";'
-                . '    elm.appendChild(msg);'
-                . '  },1);'
-                . '}; var loop = function() { cnt--; if(cnt>=0){ document.getElementById("jx_refresh_count").innerHTML = cnt; };  if (cnt<0) document.location.reload(); else setTimeout(loop, 1000); }; loop() ;</script>';
 
-                //self::$status->addMessage("info", "timestamp = $timestamp, now = $now, diff = $diff");
-                $txt = "";
-                if ($action == 'start') $txt = "Completing the operation...";
-                if ($action == 'stop') $txt = "Monitor should be stopped in approx {$diff} seconds.";
+//                $waitSeconds = $diff + 10;
+//                $refresh = '<script type="text/javascript">var cnt = ' . $waitSeconds
+//                . '; '
+//                . 'if(cnt>0){'
+//                . '  setTimeout(function(){'
+//                . '    var elm = document.getElementById("content");'
+//                . '    var msg = document.createElement("div");'
+//                . '    msg.id = "__waitjx"; msg.name = "__waitjx";'
+//                . '    msg.innerHTML = "Please wait for JXcore to complete installation.. <style> .clearfix{display:none} </style>";'
+//                . '    elm.appendChild(msg);'
+//                . '  },1);'
+//                . '}; var loop = function() { cnt--; if(cnt>=0){ document.getElementById("jx_refresh_count").innerHTML = cnt; };  if (cnt<0) document.location.reload(); else setTimeout(loop, 1000); }; loop() ;</script>';
+//
+//                //self::$status->addMessage("info", "timestamp = $timestamp, now = $now, diff = $diff");
+//                $txt = "";
+//                if ($action == 'start') $txt = "Completing the operation...";
+//                if ($action == 'stop') $txt = "Monitor should be stopped in approx {$diff} seconds.";
+//
+//                $str = "$txt Page will be reloaded in <span id='jx_refresh_count' name='jx_refresh_count'>5</span> seconds." . $refresh;
+//                self::$status->addMessage('info', $str, true);
 
-                $str = "$txt Page will be reloaded in <span id='jx_refresh_count' name='jx_refresh_count'>5</span> seconds." . $refresh;
+
+                $refresh = '<script type="text/javascript">'
+                    . '    var elm = document.getElementById("content");'
+                    . '    var msg = document.createElement("div");'
+                    . '    msg.id = "__waitjx"; msg.name = "__waitjx";'
+                    . '    msg.innerHTML = "Please wait for JXcore to complete installation.. <style> .clearfix{display:none} </style>";'
+                    . '    elm.appendChild(msg);'
+                    . '    setTimeout( function() { document.location.reload(); }, 5000);'
+                    . '    </script>';
+
+                $str = "Completing the operation..." . $refresh;
                 self::$status->addMessage('info', $str, true);
             }
         } else {
@@ -688,6 +699,7 @@ class Common
             $monitorRunning = $json !== null;
             if ($monitorRunning && $action == 'start') {
                 self::updateCronImmediate();
+                self::$status->addMessage('info', "JXcore monitor successfully started.");
             } else if (!$monitorRunning && $action == 'stop') {
                 self::updateCronImmediate();
             } else {
@@ -978,7 +990,6 @@ class Common
             self::$status->addMessage('info', "JXcore Monitor successfully stopped.");
         }
     }
-
 }
 
 
@@ -1004,7 +1015,7 @@ class DomainInfo
     const appPath_default = "index.js";
 
     public $configChanged = false;
-    private $appFileNameChanged = false;
+    private $nginxConfigChanged = false;
 
     public $row = null;
 
@@ -1056,8 +1067,8 @@ class DomainInfo
 
         if ($changed) {
             $this->configChanged = true;
-            if ($sid == Common::sidDomainJXcoreAppPath)
-                $this->appFileNameChanged = true;
+            if (in_array($sid, [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess]))
+                $this->nginxConfigChanged = true;
         }
     }
 
@@ -1143,8 +1154,9 @@ class DomainInfo
 
                 return Common::getIcon($this->isAppRunning(), "Running on TCP: $port, TCPS: $portSSL", "Not running");
             } else {
-                $ret = Common::checkCronScheduleStatus(false);
-                $str = ($ret && $ret > 0) ? "<br>Monitor is starting in $ret secs." : "Monitor offline.";
+//                $ret = Common::checkCronScheduleStatus(false);
+//                $str = ($ret && $ret > 0) ? "<br>Monitor is starting in $ret secs." : "Monitor offline.";
+                $str = "Monitor offline.";
                 return Common::getIcon(false, "", "Not running. $str");
             }
         } else {
@@ -1546,7 +1558,7 @@ class DomainInfo
         if (!$this->isAppRunning()) {
             $this->startApp();
         } else {
-            if ($this->appFileNameChanged) {
+            if ($this->nginxConfigChanged) {
                 $this->stopApp();
                 $this->startApp();
             } else {

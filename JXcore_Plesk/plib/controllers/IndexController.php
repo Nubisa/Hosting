@@ -310,16 +310,16 @@ class IndexController extends pm_Controller_Action
                     'value' => 'nothing',
                 ));
 
-                $cronAction = pm_Settings::get(Common::sidMonitorStartScheduledByCronAction);
-                $ret = Common::checkCronScheduleStatus(false);
-                if ($ret && $ret > 0) {
-                    if ($cronAction == "start")
-                        $btn = Common::getIcon($monitorRunning, "Online", "Offline") . "<div> Monitor is scheduled to be launched in $ret seconds.</div>";
-                    else  if ($cronAction == "stop")
-                         $btn = Common::getIcon($monitorRunning, "Online", "Offline") . "<div> Monitor is scheduled to be stopped in $ret seconds.</div>";
-                } else {
+//                $cronAction = pm_Settings::get(Common::sidMonitorStartScheduledByCronAction);
+//                $ret = Common::checkCronScheduleStatus(false);
+//                if ($ret && $ret > 0) {
+//                    if ($cronAction == "start")
+//                        $btn = Common::getIcon($monitorRunning, "Online", "Offline") . "<div> Monitor is scheduled to be launched in $ret seconds.</div>";
+//                    else  if ($cronAction == "stop")
+//                         $btn = Common::getIcon($monitorRunning, "Online", "Offline") . "<div> Monitor is scheduled to be stopped in $ret seconds.</div>";
+//                } else {
                     $btn = Common::getButtonStartStop($monitorRunning, $sidMonitor, ["Online", "Start"], ["Offline", "Stop"]);
-                }
+//                }
 
 
                 $form->addElement('simpleText', 'status', array(
