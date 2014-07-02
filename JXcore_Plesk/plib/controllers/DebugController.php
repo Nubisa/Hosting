@@ -8,7 +8,7 @@ class DebugController extends pm_Controller_Action
         parent::init();
 
         // Init title for all actions
-        $this->view->pageTitle = 'JXcore Node.JS Management Panel';
+        $this->view->pageTitle = 'JXcore Plesk Extension for Node';
 
         require_once("common.php");
         $this->common = new Common($this, $this->_status);

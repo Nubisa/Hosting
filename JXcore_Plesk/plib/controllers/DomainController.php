@@ -16,7 +16,7 @@ class DomainController extends pm_Controller_Action
                 'action' => 'config',
             ),
             array(
-                'title' => 'JXcore Node.JS application log ',
+                'title' => 'JXcore Application Log ',
                 'action' => 'log',
             )
         );
@@ -70,7 +70,7 @@ class DomainController extends pm_Controller_Action
         ));
 
         if ($monitorRunning)
-            $description = $jxEnabled ? "If you disable JXcore for the domain, the running Node.JS application will be terminated!" : "When you enable JXcore support, JXcore application will also be launched.";
+            $description = $jxEnabled ? "If you disable JXcore for the domain, the running Node application will be terminated!" : "When you enable JXcore support, JXcore application will also be launched.";
         else
             $description = $jxEnabled ? "" : "When you enable JXcore, it schedules the application to run as soon as possible.";
 
@@ -83,7 +83,7 @@ class DomainController extends pm_Controller_Action
         $restartButton = $monitorRunning && $jxEnabled ? Common::getSimpleButton($sidRestart, "Restart application", "restart", "/theme/icons/16/plesk/show-all.png") : "";
 
         $form->addElement('simpleText', 'status', array(
-            'label' => 'JXcore Node.JS',
+            'label' => 'JXcore',
             'escape' => false,
             'value' => $button . $restartButton,
             'description' => $description

@@ -8,7 +8,7 @@ class IndexController extends pm_Controller_Action
         parent::init();
 
         // Init title for all actions
-        $this->view->pageTitle = 'JXcore Node.JS Management Panel';
+        $this->view->pageTitle = 'JXcore Plesk Extension for Node';
 
         require_once("common.php");
         $this->common = new Common($this, $this->_status);
@@ -620,7 +620,7 @@ class IndexController extends pm_Controller_Action
                 'noEscape' => true,
             ),
             'column-4' => array(
-                'title' => 'JXcore Node.JS',
+                'title' => 'JXcore',
                 'noEscape' => true,
             ),
             'column-5' => array(
@@ -754,22 +754,6 @@ class IndexController extends pm_Controller_Action
                 'title' => 'Domains',
                 'noEscape' => true,
             ),
-//            'column-4' => array(
-//                'title' => 'JXcore Node.JS',
-//                'noEscape' => true,
-//            ),
-//            'column-5' => array(
-//                'title' => 'TCP / TCPS',
-//                'noEscape' => true,
-//            ),
-//            'column-6' => array(
-//                'title' => 'Application status',
-//                'noEscape' => true,
-//            ),
-//            'column-7' => array(
-//                'title' => 'Runs as user',
-//                'noEscape' => true,
-//            ),
             'column-8' => array(
                 'title' => '',
                 'noEscape' => true,
