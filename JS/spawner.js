@@ -173,11 +173,10 @@ if (!isRoot || !respawned) {
 
         try {
             fs.writeFileSync(confFile, conf);
-            var ret = jxcore.utils.cmdSync("chown psaadm:nginx " + confFile + "; /etc/init.d/nginx reload");
+            var ret = jxcore.utils.cmdSync("chown psaadm:nginx " + confFile + ";");
             if (ret.exitCode) {
-                log("Cannot reload nginx config: " + ret.out);
+                log("Cannot set ownership for nginx config: " + ret.out);
             }
-//            log("return from nginx reload: " + JSON.stringify(ret));
         } catch (ex) {
             log("Cannot save nginx conf file: " + ex);
         }
@@ -248,6 +247,10 @@ if (!isRoot || !respawned) {
 //                    log("clearing the log!: " + JSON.stringify(param) );
                     try {
                         fs.unlinkSync(path.join(param.dir, "/", param.file));
+                    } catch (ex) {
+                    }
+                    try {
+                        fs.unlinkSync(path.join(param.dir, "/clearlog.txt"));
                     } catch (ex) {
                     }
                 }

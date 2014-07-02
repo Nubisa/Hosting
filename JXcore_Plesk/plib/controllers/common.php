@@ -121,6 +121,7 @@ class Common
     private static $monitorJSONFetched = false;
 
     public static $needToReloadNginx = false;
+    private static $nginxReloaded = false;
 
     function Common($controller, $status = null)
     {
@@ -273,6 +274,10 @@ class Common
         foreach ($subs as $id) {
             $sub = SubscriptionInfo::getSubscription($id);
             $sub->updateConfigs();
+        }
+
+        if (self::$needToReloadNginx) {
+            self::reloadNginx();
         }
     }
 
@@ -869,6 +874,17 @@ class Common
         }
     }
 
+    public static function reloadNginx() {
+
+        if (self::checkNginx(false) && !self::$nginxReloaded) {
+            $cmd = "/opt/psa/admin/bin/nginx_control -r";
+            @exec($cmd, $out, $ret);
+
+            StatusMessage::infoOrError($ret, "Nginx reloaded successfully.", "Cannot reload nginx. " . join("\n", $out) . ". Exit code: $ret." );
+            self::$nginxReloaded = true;
+        }
+    }
+
 
     /**
      * Calls JXcore service process for running a command as root
@@ -948,6 +964,8 @@ class Common
             if ($ret && $ret != 255) {
                 self::$status->addMessage('error', "Could not execute command: $cmd. Error code = $ret. " . join(", ", $out));
             }
+
+            self::reloadNginx();
         }
 
         $json = self::getMonitorJSON();
@@ -960,6 +978,7 @@ class Common
             self::$status->addMessage('info', "JXcore Monitor successfully stopped.");
         }
     }
+
 }
 
 
@@ -1348,12 +1367,17 @@ class DomainInfo
     }
 
 
-    public function updateConfigs($forceRestart = false) {
+    public function updateConfigs($forceRestart = false)
+    {
         $this->updateJXConfig();
         $this->updatehtaccess();
 
         $running = $this->isAppRunning();
         $enabled = $this->JXcoreSupportEnabled();
+
+        if ($this->configChanged) {
+            Common::$needToReloadNginx = true;
+        }
 
         if ($this->configChanged || $forceRestart) {
             if ($enabled) {
@@ -1944,6 +1968,10 @@ class SubscriptionInfo {
         foreach ($domains as $d) {
             $d->updateConfigs();
         }
+
+        if ($this->configChanged) {
+            Common::$needToReloadNginx = true;
+        }
     }
 
     public function get($sid) {
@@ -2001,19 +2029,23 @@ class StatusMessage {
     public static $status = null;
 
     public static function addError($err) {
+        if (!self::$status) return;
         self::$status->addMessage('error', $err);
     }
 
     public static function addDebug($txt) {
+        if (!self::$status) return;
         $txt = str_replace("\n", "<br>", $txt);
         self::$status->addMessage('warning', $txt);
     }
 
     public static function dataSavedOrNot($saved) {
+        if (!self::$status) return;
         self::$status->addMessage('info', $saved ? 'Data was successfully saved.' : 'Nothing to save.');
     }
 
     public static function infoOrError($isError, $infoMsg, $errMsg) {
+        if (!self::$status) return;
         self::$status->addMessage($isError ? 'error' : 'info', $isError ? $errMsg : $infoMsg);
     }
 }
