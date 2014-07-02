@@ -14,8 +14,8 @@ $contents = file_get_contents($tmpfile);
 //$contents = preg_replace('/(#JXcore_Begin\\n)(.*)(\\n#JXcore_End)/si', '', $contents);
 //$contents = preg_replace('/(#JXcore-immediate-Begin\\n)(.*)(\\n#JXcore-immediate-Begin)/si', '', $contents);
 
-$contents = preg_replace('/(#JXcore_Begin)(.*)(#JXcore_End)/si', '', $contents);
-$contents = preg_replace('/(#JXcore-immediate-Begin)(.*)(#JXcore-immediate-End)/si', '', $contents);
+$contents = preg_replace('/(#JXcore-Begin)(.?*)(#JXcore-End)/si', '', $contents);
+$contents = preg_replace('/(#JXcore-immediate-Begin)(.?*)(#JXcore-immediate-End)/si', '', $contents);
 
 // cleaning crontab
 if (trim($contents) === "") {

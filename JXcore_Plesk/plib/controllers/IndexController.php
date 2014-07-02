@@ -11,8 +11,18 @@ class IndexController extends pm_Controller_Action
         $this->view->pageTitle = 'JXcore Plesk Extension for Node';
 
         require_once("common.php");
-        $this->view->status = new pm_View_Status();
+        if(get_class($this->view->status) != "AdminPanel_Controller_Action_Status")
+        {
+            $this->pleskVersion = 12;
+            //$this->view->status = new pm_View_Status();
+        }
+        else{
+            $this->pleskVersion = 11;
+        }
         $this->common = new Common($this, $this->view->status);
+
+        $this->view->status->addInfo(get_class($this->view->status));
+        $this->view->status->addInfo("Version " . $this->pleskVersion);
 
         if (Common::$isAdmin) {
 

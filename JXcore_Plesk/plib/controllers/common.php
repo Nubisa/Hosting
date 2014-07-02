@@ -620,7 +620,7 @@ class Common
         $timing = "{$nextMinute} " . $hour . " " . intval($parsed[2]) . " " . intval($parsed[3]);
         $cmd = "";
         if ($action == 'start') {
-            $cmd = $timing . " * " . Common::$startupBatchPath;
+            $cmd = $timing . " * " . Common::$startupBatchPath . " > " . dirname(Common::$startupBatchPath) . "/cron-immediate.log";
         } else if ($action == 'stop') {
             $cmd = $timing . " * " . Common::$jxpath . " monitor stop";
         }
