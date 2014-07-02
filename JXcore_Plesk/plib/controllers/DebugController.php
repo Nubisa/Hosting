@@ -7,7 +7,13 @@ class DebugController extends pm_Controller_Action
     {
         parent::init();
 
-        // Init title for all actions
+        require_once("CustomStatus.php");
+        if(CustomStatus::CheckStatusRender($this)) // Plesk12
+        {
+            $this->_status = new CustomStatus();
+            $this->view->status = new CustomStatus();
+        }
+
         $this->view->pageTitle = 'JXcore Plesk Extension for Node';
 
         require_once("common.php");
@@ -112,6 +118,9 @@ class DebugController extends pm_Controller_Action
         $this->_status->addMessage("info", "Some message");
         $this->_status->addMessage("warning", "Some warning");
         $this->_status->addMessage("error", "Some error");
+
+
+        Common::reloadNginx();
     }
 
 

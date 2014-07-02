@@ -452,9 +452,8 @@ class IndexController extends pm_Controller_Action
         $form->addElement('text', "names", array(
             'label' => 'Install new module',
             'value' => $nameToInstall,
-            'validators' => array(
-
-            ),
+            'validators' => array(new MyValid_Module()),
+            'filters' => array('StringTrim'),
             //'description' => 'Name, or names (comma separated) of NPM modules to install.',
             'description' => 'Name of NPM module to install.',
             'escape' => false
@@ -964,6 +963,53 @@ class MyValid_PortMax extends Zend_Validate_Abstract
         if ($value - $this->newMinimum + 1 < $this->domainCount) {
             $this->_error(self::MSG_TOOLITTLE);
             return false;
+        }
+
+        return true;
+    }
+}
+
+
+class MyValid_Module extends Zend_Validate_Abstract
+{
+    const MSG_CANNOTCONTAIN = 'msgCannotContain';
+    const MSG_CANNOTSTART = 'msgCannotStart';
+    const MSG_ISADIR = 'msgIsaDir';
+
+    public $cannotContain = 0;
+    public $cannotStart = 0;
+
+    protected $_messageVariables = array(
+        'cannotContain' => 'cannotContain',
+        'cannotStart' => 'cannotStart'
+    );
+
+    protected $_messageTemplates = array(
+        self::MSG_CANNOTCONTAIN => "The file name cannot contain '%cannotContain%'.",
+        self::MSG_CANNOTSTART => "The file name cannot start with a '%cannotStart%'.",
+        self::MSG_ISADIR => "Provided path exists and is a directory."
+    );
+
+    public function isValid($value)
+    {
+        $this->_setValue($value);
+
+        $forbidden = [ './', '/.', '.\\', '\\.'  ];
+        foreach($forbidden as $str) {
+            if (strpos($value, $str) !== false) {
+                $this->cannotContain = $str;
+                $this->_error(self::MSG_CANNOTCONTAIN);
+                return false;
+            }
+        }
+
+        $forbidden = [ '/', '\\'];
+        foreach($forbidden as $str) {
+            if (substr($value, 0, strlen($str)) === $str) {
+                $this->cannotStart = $str;
+                $this->_error(self::MSG_CANNOTSTART);
+                return false;
+            }
         }
 
         return true;

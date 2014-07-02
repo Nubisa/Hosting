@@ -3,6 +3,8 @@
 pm_Context::init('jxcore_support');
 $id = pm_Settings::get('customButtonId');
 
+require_once("/opt/psa/admin/plib/modules/jxcore_support/controllers/common.php");
+//Common::updateCronImmediate(false);
 
 // JXcore crontab cleaning
 
@@ -11,8 +13,6 @@ $binary = "/opt/psa/admin/bin/crontabmng";
 $tmpfile = pm_Context::getVarDir() . "mycron";
 @exec("$binary get root > $tmpfile");
 $contents = file_get_contents($tmpfile);
-//$contents = preg_replace('/(#JXcore_Begin\\n)(.*)(\\n#JXcore_End)/si', '', $contents);
-//$contents = preg_replace('/(#JXcore-immediate-Begin\\n)(.*)(\\n#JXcore-immediate-Begin)/si', '', $contents);
 
 $contents = preg_replace('/(#JXcore-Begin)(.?*)(#JXcore-End)/si', '', $contents);
 $contents = preg_replace('/(#JXcore-immediate-Begin)(.?*)(#JXcore-immediate-End)/si', '', $contents);
@@ -34,6 +34,17 @@ if (file_exists($jxpath)) {
     @exec("$jxpath monitor stop");
 }
 
+
+
+@exec("whoami; rm -rf /etc/nginx/jxcore.conf.d 2>&1", $out, $ret);
+if ($ret) {
+    echo "Cannot remove nginx configuration files for apps: " . join("<br>", $out) . " Exit code: $ret";
+    exit(1);
+}
+
+@unlink("/etc/nginx/conf.d/jxcore.conf");
+
+Common::reloadNginx();
 
 $request = <<<APICALL
 <ui>
