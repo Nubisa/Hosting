@@ -32,7 +32,7 @@ $request = <<<APICALL
          <noframe>true</noframe>
          <place>navigation</place>
          <url>$baseUrl</url>
-         <text>JXcore Plesk Extension for Node</text>
+         <text>JXcore Plesk for Node</text>
       </properties>
    </create-custombutton>
 </ui>

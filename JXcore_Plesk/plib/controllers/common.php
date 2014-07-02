@@ -177,7 +177,6 @@ class Common
 
         self::$urlJXcoreDomains = $baseUrl . "index.php/index/listdomains";
         self::$urlMonitor = "http://localhost:17777/json?silent=true";
-//        self::$urlMonitor = "http://localhost:17777/json";
         self::$urlMonitorLog = "http://localhost:17777/logs";
         self::$urlJXcoreConfig = $baseUrl . "index.php/index/jxcore";
         self::$urlJXcoreModules = $baseUrl . "index.php/index/listmodules";
@@ -192,9 +191,6 @@ class Common
         self::$jxpath = pm_Settings::get(self::sidJXpath);
 
         self::$startupBatchPath = $varDir . "jxcore-for-plesk-startup.sh";
-
-//        $client = new PanelClient();
-//        self::$controller->view->userStatusBar = $client->statusBar;
 
         $client = pm_Session::getClient();
         self::$isAdmin = $client->isAdmin();
@@ -679,7 +675,7 @@ class Common
                 if ($action == 'stop') $txt = "Monitor should be stopped in approx {$diff} seconds.";
 
                 $str = "$txt Page will be reloaded in <span id='jx_refresh_count' name='jx_refresh_count'>5</span> seconds." . $refresh;
-                self::$status->addMessage('info', $str);
+                self::$status->addMessage('info', $str, true);
             }
         } else {
 
