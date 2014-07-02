@@ -83,8 +83,6 @@ class SubscriptionController extends pm_Controller_Action
 
             if ($monitorRunning && $this->subscription->configChanged) {
                 $this->subscription->updateConfigs();
-//                Common::callService("kill", -1, "Applications were restarted.", "Could not restart all of the applications.");
-//                Common::monitorStartStop('restart');
             }
 
             $this->_helper->json(array('redirect' => Common::$urlJXcoreSubscriptions));

@@ -18,11 +18,7 @@ class DomainController extends pm_Controller_Action
             array(
                 'title' => 'JXcore Node.JS application log ',
                 'action' => 'log',
-            ),
-//            array(
-//                'title' => 'Third party apps',
-//                'action' => 'third-party',
-//            ),
+            )
         );
 
         require_once("common.php");
@@ -283,14 +279,7 @@ class DomainController extends pm_Controller_Action
             $val = $form->getValue($sidLastLinesCount);
 
             if ($actionGhostPressed) {
-//                $ret = $this->domain->clearLogFile();
-//                if ($ret === false) {
-//                    $this->_status->addMessage('error', 'Could not clear the log file.');
-//                } else {
                 $this->_status->addMessage('info', 'Ghost install presswed.');
-//                }
-            } else {
-//                pm_Settings::set($sidLastLinesCount . $this->ID, $val);
             }
             $this->_helper->json(array('redirect' => Common::$urlDomainAppLog));
         }
@@ -340,12 +329,6 @@ class MyValid_FileName extends Zend_Validate_Abstract
 
         $forbidden = [ '/', '\\'];
         foreach($forbidden as $str) {
-
-
-//            $this->cannotStart = substr($value, 0, strlen($str));
-//            $this->_error(self::MSG_CANNOTSTART);
-//            return false;
-
             if (substr($value, 0, strlen($str)) === $str) {
                 $this->cannotStart = $str;
                 $this->_error(self::MSG_CANNOTSTART);
