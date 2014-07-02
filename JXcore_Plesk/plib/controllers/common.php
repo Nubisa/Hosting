@@ -496,10 +496,7 @@ class Common
         }
 
         $takenPorts = Common::getTakenAppPorts(null, $clientId);
-//        var_dump($takenPorts);
         foreach ($takenPorts as $port) {
-//            if (!$port) continue;
-//            var_dump($port);
             if ($port < self::$minApplicationPort || $port > self::$maxApplicationPort) {
                 self::$status->addMessage("warning", "Some of the applications ports out out of the range now. They are still running on old ports.");
                 break;
@@ -520,22 +517,11 @@ class Common
         // first we write a batch, which will be executed by cron
         $commands = [];
 
-        // saving to the batch file
-//        $monitorEnabled = pm_Settings::get(Common::sidMonitorEnabled) === "1";
         $monitorEnabled = true;
 
         if ($monitorEnabled) {
             $commands = [
                 // enabling proxy
-//                'json=$(a2enmod proxy_http)',
-//                'if [[ $json == *"new config"* ]]; then',
-//                'echo "need restart $json"',
-//                'service apache2 restart',
-//                'else',
-//                'echo "no restart $json"',
-//                'fi',
-//                'which a2enmod > /tmp/xxx.txt',
-//                'a2enmod proxy_http >> /tmp/xxx.txt',
 
                 'if [ -d /etc/nginx/conf.d ] && [ ! -e /etc/nginx/conf.d/jxcore.conf ]; then',
                 'mkdir /etc/nginx/jxcore.conf.d',
@@ -554,26 +540,9 @@ class Common
 
             foreach (self::$domains as $id=>$domain) {
                 $domain = Common::getDomain($id);
-//                $sub = $domain->getSubscription();
-//
-//                if (!$sub) {
-//                    self::$status->addMessage("error", "Cannot find subscription for the domain.");
-//                    continue;
-//                }
 
                 $enabled = $domain->JXcoreSupportEnabled();
                 $path = $domain->getAppPath(true);
-
-//                $out = null;
-//                $spawner = $domain->getSpawnerPath($out);
-//                if ($spawner === false) {
-//                    self::$status->addMessage("error", $out);
-//                    continue;
-//                }
-//
-//                $opt = $domain->getSpawnerParams(array("user" => $domain->sysUser, "log" => $domain->appLogPath, "file" => $domain->getAppPath(true),
-//                                "domain" => $domain->name, "tcp" => $domain->getAppPort(), "tcps" => $domain->getAppPort(true), "logWebAccess" => $domain->getAppLogWebAccess() ));
-//                $sub->jxpath . " {$spawner} -opt {$opt}";
 
                 $cmd = $domain->getSpawnerCommand();
                 if (!$cmd) continue;
@@ -834,10 +803,7 @@ class Common
         //return;
 
         $cmd1 = "/opt/psa/admin/bin/httpd_modules_ctl -s";
-//        $cmd2 = "/opt/psa/admin/bin/apache_control_adapter --restart";
         $cmd2 = "/opt/psa/admin/bin/httpd_modules_ctl -e proxy_http";
-
-//        $before = shell_exec($cmd1);
 
         $out = null;
         $ret = null;
@@ -889,9 +855,6 @@ class Common
 
     private static function enableNginx()
     {
-//        self::callService("nginx", "start", null, "Nginx could not be enabled.");
-
-//        $cmd2 = "/opt/psa/admin/bin/apache_control_adapter --restart";
         $cmd2 = "/opt/psa/admin/bin/nginxmng -e 2>&1";
 
         if (!self::checkNginx(false)) {
@@ -923,7 +886,6 @@ class Common
 
         $url = Common::$urlService . "cmd?{$sid}={$arg}";
 
-//        StatusMessage::addDebug("Callservice: $url");
         $ret = Common::getURL($url, $out);
         $out = htmlspecialchars($out);
         $ok = str_replace("\n", "<br>", trim($out)) == "OK";
@@ -1142,7 +1104,6 @@ class DomainInfo
                 sleep(1);
             }
 
-//            StatusMessage::addDebug("Was waiting for $a times");
         }
         return $running;
     }
@@ -1320,24 +1281,6 @@ class DomainInfo
 
         $arr = [];
 
-//        $params = array(
-//            "portTCP" => Common::sidDomainJXcoreAppPort,
-//            "portTCPS" => Common::sidDomainJXcoreAppPortSSL,
-//            "maxCPU" => Common::sidDomainJXcoreAppMaxCPULimit,
-//            "maxCPUInterval" => Common::sidDomainJXcoreAppMaxCPUInterval,
-//            "maxMemory" => Common::sidDomainJXcoreAppMaxMemLimit,
-//            "allowCustomSocketPort" => Common::sidDomainJXcoreAppAllowCustomSocketPort,
-//            "allowSysExec" => Common::sidDomainJXcoreAppAllowSysExec,
-//            "allowLocalNativeModules" => Common::sidDomainJXcoreAppAllowLocalNativeModules);
-//
-//        // as non-strings
-//        foreach ($params as $key => $sid) {
-//            $val = pm_Settings::get($sid . $this->id);
-//            if (trim($val) != "") {
-//                $arr[] = "\"{$key}\" : {$val}";
-//            }
-//        }
-
         // as strings
         foreach ($additionalParams as $key => $val) {
             $arr[] = "\"{$key}\" : \"{$val}\"";
@@ -1381,7 +1324,6 @@ class DomainInfo
             } else {
                 $out = Common::callService("delete", "applog&path=" .$this->appLogPath, null, null, true);
                 $ret = !file_exists($this->appLogPath);
-//                StatusMessage::addDebug($out);
             }
 
             StatusMessage::infoOrError(!$ret, 'Log cleared.', 'Could not clear the log file.');
@@ -1417,7 +1359,6 @@ class DomainInfo
         $running = $this->isAppRunning();
         $enabled = $this->JXcoreSupportEnabled();
 
-//        StatusMessage::addDebug("Config changed: {$this->configChanged}, enabled: $enabled, running: $running");
         if ($this->configChanged || $forceRestart) {
             if ($enabled) {
                 if ($running) {
@@ -1477,7 +1418,6 @@ class DomainInfo
 
             $old = @file_get_contents($fname);
 
-//            StatusMessage::addDebug("$fname\nold <br>$old<br><br>new<br>$json<br><br>equeal ? " .($old === $json) );
 
             if ($old !== $json) {
                 $this->configChanged = true;
@@ -1517,8 +1457,6 @@ class DomainInfo
             $htaccess[] = 'RewriteCond %{SERVER_PORT} 443';
             $htaccess[] = 'RewriteRule ^(.*)$ https://0.0.0.0:' . $tcps . '/$1 [P]';
 
-//            $htaccess[] = 'RewriteCond %{SERVER_PORT} 80';
-//            $htaccess[] = 'RewriteRule ^(.*)$ http://0.0.0.0:' . $this->getAppPort() . '/$1 [P]';
         } else {
             $htaccess = [];
         }
@@ -1547,7 +1485,6 @@ class DomainInfo
             // no point to run an application now, if monitor is not running
             StatusMessage::addError("$errMsg the JXcore monitor is not running.");
         } else {
-//            self::enableServices();
             if ($this->isAppRunning()) return;
 
             $cmd = $this->getSpawnerCommand();
@@ -1620,22 +1557,11 @@ class PanelClient
         if (!$clientId) {
             $client = pm_Session::getClient();
             $clientId = $client->getId();
-        } else {
-            // why this doesn't work?
-//            $clientId = intval($clientId);
-            // $client = new pm_Client($clientId);
         }
 
         $this->whoami = shell_exec("whoami");
 
         $dbAdapter = pm_Bootstrap::getDbAdapter();
-
-//        $sql = "SELECT
-//            sys.login as sysLogin, cli.login as cliLogin, cli.type as cliType
-//            FROM clients cli
-//            join smb_users smb on smb.login = cli.login
-//            join sys_users sys on sys.id = smb.id
-//            where cli.id = $clientId";
 
 
         $sql = "SELECT
@@ -1653,12 +1579,6 @@ class PanelClient
         $this->panelLogin = $row["cliLogin"];
         $this->type = $row["cliType"];
         $this->statusBar = "Client Id: {$clientId}, Username: <b>{$this->panelLogin}</b>. Account type: <b>{$this->type}</b>. Whoami: <b>{$this->whoami}</b>. System user: <b>{$this->sysUser}</b><hr>";
-
-//        if (pm_Session::isImpersonated()) {
-//            $client = pm_Session::getImpersonatedClientId();
-//            $clientId = $client->getId();
-//            $this->statusBar .= "Imp client. Id {$clientId}, login: {$client->getProperty('login')} <hr>";
-//        }
     }
 }
 
@@ -1711,7 +1631,6 @@ class JXconfig {
             }
 
             return $ret;
-//            return "<span style='color: green;'>$ret</span>";
         }
         return "";
     }
@@ -1771,9 +1690,6 @@ class JXconfig {
         // allowLocalNativeModules: bool
 
         $canEdit = Common::$isAdmin;
-//        if (!Common::$isAdmin) {
-//            return;
-//        }
 
         Common::addHR($form);
 
@@ -1983,23 +1899,6 @@ class SubscriptionInfo {
                        "globalModulePath" : "' . Common::$dirNativeModules . '",
                        "globalApplicationConfigPath" : "' . Common::$dirAppsConfigs . '",
                        "npmjxPath" : "' . dirname(Common::$jxpath) . '"';
-
-//            $params = [
-//                Common::sidDomainJXcoreAppMaxCPULimit,
-//                Common::sidDomainJXcoreAppMaxCPUInterval,
-//                Common::sidDomainJXcoreAppMaxMemLimit,
-//                Common::sidDomainJXcoreAppAllowCustomSocketPort,
-//                Common::sidDomainJXcoreAppAllowSysExec,
-//                Common::sidDomainJXcoreAppAllowLocalNativeModules
-//            ];
-//
-//            foreach ($params as $param) {
-//                $val = $this->get($param);
-//                if ($val) {
-//                    $sid = str_replace("jxparam_", "", $param);
-//                    $cfg .= ",\n" . '"'. $sid.'" : ' . $val;
-//                }
-//            }
 
             $cfg .= '}';
 
