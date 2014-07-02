@@ -9,6 +9,14 @@ class SubscriptionController extends pm_Controller_Action
     {
         parent::init();
 
+        require_once("CustomStatus.php");
+        if(CustomStatus::CheckStatusRender($this)) // Plesk12
+        {
+            $this->_status = new CustomStatus($this->_helper);
+            $this->view->status = new CustomStatus($this->_helper);
+        }
+
+
         $this->view->pageTitle = 'JXcore - subscription configuration';
 
         require_once("common.php");

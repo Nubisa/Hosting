@@ -10,8 +10,8 @@ class DebugController extends pm_Controller_Action
         require_once("CustomStatus.php");
         if(CustomStatus::CheckStatusRender($this)) // Plesk12
         {
-            $this->_status = new CustomStatus();
-            $this->view->status = new CustomStatus();
+            $this->_status = new CustomStatus($this->_helper);
+            $this->view->status = new CustomStatus($this->_helper);
         }
 
         $this->view->pageTitle = 'JXcore Plesk Extension for Node';

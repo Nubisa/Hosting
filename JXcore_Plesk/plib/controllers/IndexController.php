@@ -6,11 +6,13 @@ class IndexController extends pm_Controller_Action
     {
         parent::init();
 
+        $initialized = pm_Settings::get("jxcore_initialized") == "true";
+
         require_once("CustomStatus.php");
         if(CustomStatus::CheckStatusRender($this)) // Plesk12
         {
-            $this->_status = new CustomStatus();
-            $this->view->status = new CustomStatus();
+            $this->_status = new CustomStatus($this->_helper);
+            $this->view->status = new CustomStatus($this->_helper);
         }
 
        // $this->_status->addMessage("info", "aaaa");

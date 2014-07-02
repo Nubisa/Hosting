@@ -3,20 +3,28 @@
 
 class CustomStatus
 {
-    function CustomStatus(){
+    function CustomStatus($_helper){
+        $this->host = $_helper;
         $this->messageId = 0;
     }
 
     public function addMessage($type, $message){
+        if($type != "error")
+            return;
+
         $this->messageId++;
-        echo  "<script>"
+        $message = str_replace("'"," ", $message);
+        $message = str_replace("\n","<br/>", $message);
+        $str = "(function(){"
             . " if(!window.__inter" . $this->messageId . "){"
             . "  window.__inter" . $this->messageId . " = setInterval(function(){"
             . "    if(document.getElementById('content')){"
             . "      clearInterval(window.__inter" . $this->messageId . ");"
             . "    }else{return;}"
             . "   __addMessage('".$type."','".$message."');"
-            . "  },500);}</script>";
+            . "  },500);}})();";
+
+        $this->host->json(array('redirect' => 'javascript:'. $str));
     }
 
     public function hasMessages(){

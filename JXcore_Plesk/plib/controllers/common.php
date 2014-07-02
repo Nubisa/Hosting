@@ -648,6 +648,8 @@ class Common
 
     public static function checkCronScheduleStatus($addMessage)
     {
+        return;
+
         $action = pm_Settings::get(self::sidMonitorStartScheduledByCronAction);
         $timestamp = pm_Settings::get(self::sidMonitorStartScheduledByCron);
         if (!$timestamp) return null;
@@ -950,6 +952,13 @@ class Common
         if (in_array($req, ['start', 'restart']) && !$monitorWasRunning) {
             self::enableServices();
             $ret = Common::updateCronImmediate("start");
+
+            for($a=1; $a<90; $a++) {
+                sleep(1);
+                $json = self::getMonitorJSON(true);
+                if ($json !== null) break;
+            }
+
             $cmd = null;
         } else
             if ($req === 'stop' && $monitorWasRunning) {
@@ -984,10 +993,11 @@ class Common
         $monitorRunning = $json !== null;
 
         if ($req === 'start' && $monitorRunning && !$monitorWasRunning) {
-            self::$status->addMessage('info', "JXcore Monitor successfully started.");
+            pm_Settings::set("jxcore_initialized", true);
+            //self::$status->addMessage('info', "JXcore Monitor successfully started.");
         }
         if ($req === 'stop' && !$monitorRunning && $monitorWasRunning) {
-            self::$status->addMessage('info', "JXcore Monitor successfully stopped.");
+            //self::$status->addMessage('info', "JXcore Monitor successfully stopped.");
         }
     }
 }
@@ -1495,15 +1505,20 @@ class DomainInfo
         $txt = "";
 
         if ($mgr->fileExists($relFile)) $txt = $mgr->fileGetContents($relFile);
+        $old = $txt;
 
         $txt = Common::saveBlockToText($txt, "JXcore-domainID-" . $this->id, join("\n", $htaccess), null);
         $txt = trim($txt);
 
-        $mgr->filePutContents($relFile, $txt);
+        if ($txt !== $old) {
+//            StatusMessage::addDebug(".htaccess path test. Writing to file disabled.\nFor domain {$this->name}:\n the full path is $file\nbut i'm using relative path {$relFile}");
 
-        $txt2 = file_get_contents($file);
-        if ($txt2 !== $txt)
-            return "Cannot save $file";
+//        $mgr->filePutContents($relFile, $txt);
+//
+//        $txt2 = file_get_contents($file);
+//        if ($txt2 !== $txt)
+//            return "Cannot save $file";
+        }
 
         return true;
     }
