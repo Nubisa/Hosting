@@ -170,6 +170,8 @@ class DebugController extends pm_Controller_Action
         $this->view->form = $form;
 
         $this->_status->addMessage("info", "Some message");
+        $this->_status->addMessage("warning", "Some warning");
+        $this->_status->addMessage("error", "Some error");
     }
 
 }
