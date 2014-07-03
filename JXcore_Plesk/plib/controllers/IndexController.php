@@ -41,10 +41,10 @@ class IndexController extends pm_Controller_Action
                     'title' => 'NPM Modules',
                     'action' => 'listmodules',
                 ),
-                array(
-                    'title' => 'Monitor log',
-                    'action' => 'log'
-                ),
+//                array(
+//                    'title' => 'Monitor log',
+//                    'action' => 'log'
+//                ),
                 array(
                     'title' => 'Subscriptions',
                     'action' => 'listsubscriptions'
@@ -106,7 +106,7 @@ class IndexController extends pm_Controller_Action
     /**
      * Displays JXcore monitor log in panel's tab.
      */
-    public function logAction()
+    public function logAction_inactive()
     {
         if ($this->redirect(true)) return;
 
