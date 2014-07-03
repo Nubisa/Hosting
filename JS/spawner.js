@@ -221,7 +221,10 @@ if (!isRoot || !respawned) {
 
         child.on('exit', function () {
             if (!exitting) {
-                process.exit();
+                exitting = true;
+                setTimeout(function(){
+                    process.exit();
+                },1500);
             }
         });
     }
@@ -298,18 +301,22 @@ if (!isRoot || !respawned) {
     });
 
     var exit = function (code) {
-        exitting = true;
-        try {
-            if (child) {
-                process.kill(child.pid);
-            }
-        } catch (ex) {
-        }
-        try {
-            if (!code) {
-                process.exit(77);
-            }
-        } catch (ex) {
+        if(!exitting){
+            exitting = true;
+            setTimeout(function(){
+                try {
+                    if (child) {
+                        process.kill(child.pid);
+                    }
+                } catch (ex) {
+                }
+                try {
+                    if (!code) {
+                        process.exit(77);
+                    }
+                } catch (ex) {
+                }
+            }, 1500);
         }
     };
 
