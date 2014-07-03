@@ -358,7 +358,7 @@ class Common
         self::saveConfig($path);
     }
 
-    public static function saveBlockToText($contents, $blockName, $blockBody, $beginning)
+    public static function saveBlockToText($contents, $blockName, $blockBody)
     {
         $commands = ["#{$blockName}-Begin", $blockBody, "#{$blockName}-End"];
 
@@ -367,11 +367,7 @@ class Common
             $contents = preg_replace('/(' . $commands[0] . ')(.*)(' . $commands[2] . ')/si', '', $contents);
         } else {
             if (strpos($contents, $commands[0]) === false)
-                if ($beginning) {
-                    $contents = join("\n", $commands) . "\n\n" . $contents;
-                } else {
-                    $contents .= "\n\n" . join("\n", $commands) . "\n\n";
-                }
+                $contents .= "\n\n" . join("\n", $commands) . "\n\n";
             else
                 $contents = preg_replace('/(' . $commands[0] . ')(.*)(' . $commands[2] . ')/si', '$1' . "\n{$commands[1]}\n" . '$3', $contents);
         }
@@ -396,15 +392,6 @@ class Common
         return $ok;
     }
 
-
-    public static function clearPorts()
-    {
-//            self::$status->addMessage("info", "Clearing the ports");
-        for ($a = 10000; $a < 10020; $a++) {
-            pm_Settings::set(self::sidDomainJXcoreAppPort . "$a", 5);
-            pm_Settings::set(self::sidDomainJXcoreAppPortSSL . "$a", 6);
-        }
-    }
 
     /**
      * Returns array of ports already taken by JXcore applications assigned to domains
@@ -537,7 +524,6 @@ class Common
                 $domain = Common::getDomain($id);
 
                 $enabled = $domain->JXcoreSupportEnabled();
-                $path = $domain->getAppPath(true);
 
                 $cmd = $domain->getSpawnerCommand();
                 if (!$cmd) continue;
@@ -555,8 +541,10 @@ class Common
 
         file_put_contents(Common::$startupBatchPath, join("\n", $commands));
         chmod(Common::$startupBatchPath, 0700);
+    }
 
 
+    public static function updateCron() {
         // modifying crontab
         $binary = "/opt/psa/admin/bin/crontabmng";
 
@@ -565,12 +553,12 @@ class Common
         $contents = file_get_contents($tmpfile);
 
         $cmd = "@reboot " . Common::$startupBatchPath;
-        $contents = self::saveBlockToText($contents, "JXcore", $monitorEnabled ? $cmd : "", null);
+        $contents = self::saveBlockToText($contents, "JXcore", $cmd, null);
 
         if (trim($contents) === "") {
             @exec("$binary remove root");
         } else {
-            // a NewLine characted was needed on Nubisa's production server
+            // a NewLine character was needed on Nubisa's production server
             file_put_contents($tmpfile, $contents . "\n");
             @exec("$binary set root $tmpfile", $out, $ret);
             if ($ret) {
@@ -619,7 +607,7 @@ class Common
         $timing = "{$nextMinute} " . $hour . " " . intval($parsed[2]) . " " . intval($parsed[3]);
         $cmd = "";
         if ($action == 'start') {
-            $cmd = $timing . " * " . Common::$startupBatchPath . " > " . dirname(Common::$startupBatchPath) . "/cron-immediate.log";
+            $cmd = $timing . " * " . Common::$startupBatchPath;
         } else if ($action == 'stop') {
             $cmd = $timing . " * " . Common::$jxpath . " monitor stop";
         }
@@ -989,11 +977,10 @@ class Common
         $monitorRunning = $json !== null;
 
         if ($req === 'start' && $monitorRunning && !$monitorWasRunning) {
-            pm_Settings::set("jxcore_initialized", true);
-            //self::$status->addMessage('info', "JXcore Monitor successfully started.");
+            self::$status->addMessage('info', "JXcore Monitor successfully started.");
         }
         if ($req === 'stop' && !$monitorRunning && $monitorWasRunning) {
-            //self::$status->addMessage('info', "JXcore Monitor successfully stopped.");
+            self::$status->addMessage('info', "JXcore Monitor successfully stopped.");
         }
     }
 }

@@ -26,14 +26,14 @@ class SubscriptionController extends pm_Controller_Action
         if (!ctype_digit($this->ID)) unset($this->ID);
 
         if (!$this->ID) {
-            $this->ID = pm_Settings::get("currentSubscriptionId");
+            $this->ID = pm_Settings::get("currentSubscriptionId" . pm_Session::getClient()->getId() );
 
             if (!$this->ID) {
                 $this->view->err = "Unknown subscription ID";
                 return;
             }
         } else {
-            pm_Settings::set("currentSubscriptionId", $this->ID);
+            pm_Settings::set("currentSubscriptionId" . pm_Session::getClient()->getId(), $this->ID);
         }
 
         $this->subscription = SubscriptionInfo::getSubscription($this->ID);

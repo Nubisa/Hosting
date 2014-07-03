@@ -97,7 +97,7 @@ class IndexController extends pm_Controller_Action
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
             $this->_status->beforeRedirect = true;
-            $this->_helper->json(array('redirect' => pm_Context::getBaseUrl()));
+            $this->_helper->json(array('redirect' => pm_Context::getModulesListUrl()));
         }
 
         $this->view->form = $form;
@@ -290,8 +290,8 @@ class IndexController extends pm_Controller_Action
 
             if (Common::$jxv) {
                 $buttons =
-                    Common::getSimpleButton($sidJXcore, 'Reinstall', "install", "/theme/icons/16/plesk/show-all.png", null, "margin-left: 0;") .
-                    Common::getSimpleButton($sidJXcore, 'Uninstall', "uninstall", "/theme/icons/16/plesk/delete.png");
+                    Common::getSimpleButton($sidJXcore, 'Reinstall', "install", "/theme/icons/16/plesk/show-all.png", null, "margin-left: 0;");// .
+                    //Common::getSimpleButton($sidJXcore, 'Uninstall', "uninstall", "/theme/icons/16/plesk/delete.png");
             } else {
                 $buttons = Common::getSimpleButton($sidJXcore, 'Install', "install", "/theme/icons/16/plesk/upload-files.png", null, "margin-left: 0;");
             }
@@ -301,7 +301,7 @@ class IndexController extends pm_Controller_Action
                 'escape' => false,
                 'value' => $buttons,
                 'description' => Common::$jxv ?
-                        "When reinstalling or uninstalling, all currently running applications will be terminated!" :
+                        "If you reinstall JXcore, all the running node applications will be restarted after updating JXcore binary." :
                         "JXcore distribution for this platform will be downloaded and installed."
             ));
 
@@ -790,9 +790,10 @@ class IndexController extends pm_Controller_Action
                     $procv = shell_exec('cat /proc/version');
 
                     $distros = array(
-                        "red hat" => "rh", // red hat/fedora/centos
-                        "ubuntu" => "ub", // ubuntu/mint
-                        'suse' => 'suse',
+                        "Red Hat" => "rh", // red hat/fedora/centos
+                        "Ubuntu" => "ub", // ubuntu/mint
+                        'SUSE' => 'suse',
+                        'Debian' => 'deb'
                     );
 
 //                    $str = $procv . "@@@@@";
@@ -808,7 +809,14 @@ class IndexController extends pm_Controller_Action
 
 
         if ($platform !== null) {
-            $basename = "jx_{$platform}{$arch}";
+            if($platform == "suse")
+                $basename = "jx_suse32.zip";
+            else
+                $basename = "jx_{$platform}{$arch}";
+
+            if($arch ."" == "32" && $platform == "deb")
+                $basename = "jx_ub32.zip";
+
             $url = $downloadURL . $basename . ".zip";
             $tmpdir = pm_Context::getVarDir();
             $zip = $tmpdir . $basename . ".zip";
@@ -854,6 +862,7 @@ class IndexController extends pm_Controller_Action
                         if (file_exists($unzippedJX)) {
                             $jxv = shell_exec("$unzippedJX -jxv");
                             Common::setJXdata($jxv, $unzippedJX);
+                            Common::updateCron();
 
                             $output = "JXcore {$basename} version {$jxv} successfully installed.";
                             return true;

@@ -35,14 +35,14 @@ class DomainController extends pm_Controller_Action
         if (!ctype_digit($this->ID)) unset($this->ID);
 
         if (!$this->ID) {
-            $this->ID = pm_Settings::get("currentDomainId");
+            $this->ID = pm_Settings::get("currentDomainId" . pm_Session::getClient()->getId());
 
             if (!$this->ID) {
                 $this->view->err = "Unknown domain ID";
                 return;
             }
         } else {
-            pm_Settings::set("currentDomainId", $this->ID);
+            pm_Settings::set("currentDomainId" . pm_Session::getClient()->getId(), $this->ID);
         }
 
         $this->domain = Common::getDomain(intval($this->ID));

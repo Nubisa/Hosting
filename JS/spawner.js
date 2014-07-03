@@ -4,7 +4,7 @@
 
 
 var fs = require("fs");
-var path = require("path");
+var pathModule = require("path");
 var os = require("os");
 
 var whoami = jxcore.utils.cmdSync("whoami").out.toString().trim();
@@ -40,7 +40,7 @@ if (!logPath) {
     log("Unknown log path.", true);
     process.exit(7);
 }
-var logPathDir = path.dirname(logPath);
+var logPathDir = pathModule.dirname(logPath);
 
 // searching for -u arg and converting it into int uid
 var uid = null;
@@ -99,9 +99,10 @@ if (!isRoot || !respawned) {
     }, function (delay) {
         setTimeout(function () {
 
-        }, delay + 5000);
+        }, delay + 3000);
     });
 
+    return;
 } else {
 
     var out = 'ignore';
@@ -151,7 +152,7 @@ if (!isRoot || !respawned) {
     var file = options.file;
 
     //checkAccess(file);
-    checkAccess(path.dirname(file));
+    checkAccess(pathModule.dirname(file));
 
     // ########  saving nginx conf
     var confDir = "/etc/nginx/jxcore.conf.d/";
@@ -161,7 +162,7 @@ if (!isRoot || !respawned) {
         var nginx = require("./nginxconf.js");
         nginx.resetInterfaces();
         var logWebAccess = options.logWebAccess == 1 || options.logWebAccess == "true";
-        var conf = nginx.createConfig(options.domain, [ options.tcp, options.tcps], logWebAccess ? path.dirname(logPath) : null);
+        var conf = nginx.createConfig(options.domain, [ options.tcp, options.tcps], logWebAccess ? pathModule.dirname(logPath) : null);
 
         try {
             fs.writeFileSync(confFile, conf);
@@ -182,44 +183,31 @@ if (!isRoot || !respawned) {
     delete options.tcps;
     delete options.logWebAccess;
 
-    // default path for app config
-//    var configFile = file + ".jxcore.config";
-//    var configFileIsDefault = true;
-//    var jxconfig = root_functions.readJXconfig();
-////    log("config read: " + JSON.stringify(jxconfig));
-//    if (jxconfig && jxconfig.globalApplicationConfigPath) {
-//        var base = file.replace(/[\/]/g, "_").replace(/[\\]/g, "_").replace(/:/g, "_") + ".jxcore.config";
-//        // assuming, that folder exists (it's created by php)
-//        if (fs.existsSync(jxconfig.globalApplicationConfigPath)) {
-//            configFile = path.join(jxconfig.globalApplicationConfigPath, "/", base);
-//            configFileIsDefault = false;
-//        }
-//    }
-////    log("app cfg file: " + configFile);
-//    fs.writeFileSync(configFile, JSON.stringify(options));
-
+    var child = null;
     // this can be done only by privileged user.
     // node throws exception otherwise
     // and if file does not exists, fileWatcher fill check for this
-    if (fs.existsSync(file)) {
-        var spawn = require('child_process').spawn;
-        var child = spawn(process.execPath, [file], { uid: uid, stdio: [ 'ignore', out, out ], cwd: path.dirname(file)});
+    var runApp = function(){
+        if (fs.existsSync(file)) {
+            var spawn = require('child_process').spawn;
+            child = spawn(process.execPath, [file], { uid: uid, stdio: [ 'ignore', out, out ], cwd: pathModule.dirname(file)});
 
-        child.on('error', function (err) {
-            if (err.toString().trim().length) {
-                log("Child error: " + err, true);
-            }
-        });
+            child.on('error', function (err) {
+                if (err.toString().trim().length) {
+                    log("Child error: " + err, true);
+                }
+            });
 
-        child.on('exit', function () {
-            if (!exiting) {
-                exiting = true;
-                setTimeout(function(){
-                    process.exit();
-                },5000);
-            }
-        });
-    }
+            child.on('exit', function () {
+                if (!exiting) {
+                    exiting = true;
+                    setTimeout(function(){
+                        process.exit(55);
+                    },2000);
+                }
+            });
+        }
+    };
 
     // subscribing to monitor
     jxcore.monitor.followMe(function (err, txt) {
@@ -228,72 +216,45 @@ if (!isRoot || !respawned) {
         } else {
             log("Subscribed successfully: " + txt);
 
+            try{
+                runApp();
+            }catch(ex){
+                exiting = true;
+                process.exit();
+            };
 
-            root_functions.watch(path.dirname(file), logPathDir, function (param) {
+            root_functions.watch(pathModule.dirname(file), logPathDir, function (param) {
 
                 if (param.clearlog && out && out != "ignore" ) {
                     fs.ftruncateSync(out, 0);
 //                    log("clearing the log!: " + JSON.stringify(param) );
                     try {
-                        fs.unlinkSync(path.join(param.dir, "/", param.file));
+                        fs.unlinkSync(pathModule.join(param.dir, "/", param.file));
                     } catch (ex) {
                     }
                     try {
-                        fs.unlinkSync(path.join(param.dir, "/clearlog.txt"));
+                        fs.unlinkSync(pathModule.join(param.dir, "/clearlog.txt"));
                     } catch (ex) {
                     }
+                    return;
                 }
 
-                if(exiting)
+                var _extname = pathModule.extname(param.path).toLowerCase();
+                if(exiting || (_extname != '.js' && _extname != ".jx"))
                     return;
 
-                if (param.fname) {
-                    var restart = false;
-                    if (fname == file) {
-                        // app itself was changed
-                        if (!fs.existsSync(fname)) {
-                            // lets kill the child
+                exiting = true;
 
-                            try {
-                                if (child) {
-                                    exiting = true;
+                var counter = 0;
+                var _inter = setInterval(function(){
+                    counter++;
 
-                                    try{
-                                        process.kill(child.pid);
-                                    }catch(ex){};
+                    if(counter>=6 || fs.existsSync(file)){
+                        clearInterval(_inter);
 
-                                    child = null;
-                                    var counter = 0;
-                                    var _fname = fname;
-                                    setInterval(function(){
-                                        counter++;
-
-                                        if(counter>=10 || fs.existsSync(_fname)){
-                                            process.exit();
-                                        }
-                                    }, 500);
-                                    return;
-                                }
-                            } catch (ex) {
-                            }
-                        } else {
-                            // child was killed previously, so lets restart the app
-                            restart = true;
-                        }
-                    } else {
-                        restart = true;
+                        process.exit(77);
                     }
-
-                    if (restart) {
-                        exiting = true;
-                        log("Files changed - restarting the application.");
-                        //                var ret = jxcore.utils.cmdSync('"' + process.execPath + "' monitor kill " + __filename);
-                        //                log('"' + process.execPath + "' monitor kill " + __filename + " : " + JSON.stringify(ret));
-                       setTimeout(function(){
-                           process.exit(77);
-                       },2000);
-                    }
-                }
+                }, 500);
             });
 
         }
@@ -304,20 +265,25 @@ if (!isRoot || !respawned) {
     });
 
     var exit = function (code) {
+        try {
+            if (child) {
+                //log("!!!! killing child");
+                process.kill(child.pid);
+            }
+        } catch (ex) {
+            //log("!!!!" + ex);  // 	!!!!ReferenceError: child is not defined
+        }
+
+        child = null;
+//if (!code)
         if(!exiting){
             exiting = true;
             setTimeout(function(){
                 try {
-                    if (child) {
-                        process.kill(child.pid);
-                    }
-                } catch (ex) {
-                }
-                try {
                     process.exit(77);
                 } catch (ex) {
                 }
-            }, 1500);
+            }, 2000);
         }
     };
 
