@@ -6,11 +6,7 @@
  *
  *
  * on uninstall:
- *      removing nginx configs for jxcore + reload nginx
  *      cleaning .htaccess for each domain
- *      removing jxcore_logs folder for each domain
- *
- *
  *
  * known issues:
  *      - when extension is uninstalled, and we upload some files to folders, where extension generally resides:
@@ -894,7 +890,7 @@ class Common
             $cmd = "/opt/psa/admin/bin/nginx_control -r";
             @exec($cmd, $out, $ret);
 
-            StatusMessage::infoOrError($ret, "Nginx reloaded successfully.", "Cannot reload nginx. " . join("\n", $out) . ". Exit code: $ret." );
+//            StatusMessage::infoOrError($ret, "Nginx reloaded successfully.", "Cannot reload nginx. " . join("\n", $out) . ". Exit code: $ret." );
             self::$nginxReloaded = true;
         }
     }
@@ -1070,11 +1066,9 @@ class DomainInfo
     public function set($sid, $value) {
         $old = $this->get($sid);
         pm_Settings::set($sid . $this->id, $value === null ? "" : $value);
-        pm_Settings::set($sid . $this->id . "isset", $value === null ? "" : "true");
+        pm_Settings::set($sid . $this->id . "isset", $value === null ? "false" : "true");
 
         $changed = $old != $value;
-//        if ($changed) StatusMessage::addDebug("Changed $sid from $old to $value");
-
         if ($changed) {
             $this->configChanged = true;
             if (in_array($sid, [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess]))
@@ -1409,6 +1403,7 @@ class DomainInfo
                     $this->startApp();
                 }
             } else {
+                Common::callService("nginx", "remove&domain=" . $this->name, null, null);
                 if ($running) {
                     $this->stopApp();
                 } else {
@@ -1554,11 +1549,12 @@ class DomainInfo
 
         if (!$this->isAppRunning()) return;
 
-        $nginexconf = "/etc/nginx/jxcore.conf.d/" . $this->name . ".conf";
-        if (@file_exists($nginexconf)) {
-            @unlink($nginexconf);
-            Common::callService("nginx", "reload", null, "Cannot reload nginx config.");
-        }
+//        $nginexconf = "/etc/nginx/jxcore.conf.d/" . $this->name . ".conf";
+//        if (@file_exists($nginexconf)) {
+//            @unlink($nginexconf);
+//            Common::callService("nginx", "reload", null, "Cannot reload nginx config.");
+//            Common::reloadNginx();
+//        }
 
         $cmd = Common::$jxpath . " monitor kill {$this->getSpawnerPath()} 2>&1";
         @exec($cmd, $out, $ret);
@@ -1650,38 +1646,6 @@ class JXconfig {
         ));
     }
 
-    private static function check(&$form, $sid, $domainId, $isDomain) {
-
-        return "";
-        if (!$isDomain) return;
-
-        $domain = Common::getDomain($domainId);
-        $sub = $domain->getSubscription();
-
-        $vald = $domain->get($sid);
-        $vals = $sub->get($sid);
-
-        if (!$vald && $vals) {
-
-            if (!$form && $vals == 1) $vals = "'true'";
-            $ret = "The value $vals from subscription config will be used unless you submit this form.";
-
-            if ($form) {
-                $form->addElement('simpleText', "{$sid}tmp", array(
-                    'label' => '',
-                    'escape' => false,
-                    'value' => "<span style='color: green;'>$ret</span>",
-                    'description' => ""
-                ));
-
-                Common::addHR($form);
-            }
-
-            return $ret;
-        }
-        return "";
-    }
-
 
     /*
      * Gets value for domain or subscription
@@ -1702,7 +1666,6 @@ class JXconfig {
                 $wasSet = false;
 
             $ret = null;
-
             if (!$wasSet && $vals) {
                 $ret = $vals;
             } else {
@@ -1710,13 +1673,12 @@ class JXconfig {
             }
 
             $form->addElement('hidden', "{$sid}_org", array(
-                'value' => $ret
+                'value' => $vald
             ));
             return $ret;
         } else {
             $subscription = SubscriptionInfo::getSubscription($id);
             $val = $subscription->get($sid);
-//            StatusMessage::addDebug("value for $sid = $val");
             return $val;
         }
 
@@ -1749,18 +1711,17 @@ class JXconfig {
         $val = self::get($form, Common::sidDomainJXcoreAppMaxMemLimit, $id, $isDomain);
         $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxMemLimit : ("field" . ($tmpID++)) , array(
             'label' => 'Maximum memory limit',
-            'value' => $canEdit ? $val : ($val ? "$val kB" : "disabled"),
+            'value' => $canEdit ? $val : ($val ? "$val kB" : "no limit"),
             'required' => false,
             'validators' => array('Int', $maxInt),
             'description' => 'Maximum size of memory (kB), which can be allocated by the application. Value 0 disables the limit.',
             'escape' => false
         ));
-        self::check($form, Common::sidDomainJXcoreAppMaxMemLimit, $id, $isDomain);
 
         $val = self::get($form, Common::sidDomainJXcoreAppMaxCPULimit, $id, $isDomain);
         $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxCPULimit : ("field" . ($tmpID++)), array(
             'label' => 'Max CPU',
-            'value' => $canEdit ? $val : ($val ? "$val %" : "disabled"),
+            'value' => $canEdit ? $val : ($val ? "$val %" : "no limit"),
             'required' => false,
             'validators' => array(
                 'Int', $maxInt
@@ -1770,7 +1731,6 @@ class JXconfig {
             'description' => 'Maximum CPU usage (percentage) allowed for the application. Value 0 disables the limit.',
             'escape' => false
         ));
-        self::check($form, Common::sidDomainJXcoreAppMaxCPULimit, $id, $isDomain);
 
         $val = self::get($form, Common::sidDomainJXcoreAppMaxCPUInterval, $id, $isDomain);
         $form->addElement($type, $canEdit ? Common::sidDomainJXcoreAppMaxCPUInterval : ("field" . ($tmpID++)), array(
@@ -1785,30 +1745,28 @@ class JXconfig {
             'description' => 'Interval (seconds) of Max CPU usage check. Default value is 2.',
             'escape' => false
         ));
-        self::check($form, Common::sidDomainJXcoreAppMaxCPUInterval, $id, $isDomain);
 
         $fake = null;
         $val = self::get($form, Common::sidDomainJXcoreAppAllowCustomSocketPort, $id, $isDomain);
-        $def = self::check($fake, Common::sidDomainJXcoreAppAllowCustomSocketPort, $id, $isDomain);
-        $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowCustomSocketPort : ("field" . ($tmpID++)), array(
+         $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowCustomSocketPort : ("field" . ($tmpID++)), array(
             'label' => 'Allow custom socket port' ,
-            'description' => "$def",
-            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow"),
+            'description' => "",
+            'value' => $canEdit ? $val : ("$val" === "1" ? "Allow" : "Disallow"),
             "escape" => false
         ));
 
         $val = self::get($form, Common::sidDomainJXcoreAppAllowSysExec, $id, $isDomain);
         $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowSysExec : ("field" . ($tmpID++)), array(
             'label' => 'Allow to spawn/exec child processes',
-            'description' => self::check($fake, Common::sidDomainJXcoreAppAllowSysExec, $id, $isDomain),
-            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
+            'description' => "",
+            'value' => $canEdit ? $val : ("$val" === "1" ? "Allow" : "Disallow")
         ));
 
         $val = self::get($form, Common::sidDomainJXcoreAppAllowLocalNativeModules, $id, $isDomain);
         $form->addElement($typeChk, $canEdit ? Common::sidDomainJXcoreAppAllowLocalNativeModules : ("field" . ($tmpID++)), array(
             'label' => 'Allow to call local native modules',
-            'description' => self::check($fake, Common::sidDomainJXcoreAppAllowLocalNativeModules, $id, $isDomain),
-            'value' => $canEdit ? $val : ($val === "1" ? "Allow" : "Disallow")
+            'description' => "",
+            'value' =>  $canEdit ? $val : ("$val" === "1" ? "Allow" : "Disallow")
         ));
 
         if ($isDomain) {
@@ -1820,7 +1778,7 @@ class JXconfig {
             $form->addElement($typeChk, $canEdit ? Common::sidDomainAppLogWebAccess : ("field" . ($tmpID++)), array(
                 'label' => 'Application\'s log web access',
                 'description' => "Will be available on http://" . $domain->name . "/" . basename($domain->appLogDir) . "/index.txt",
-                'value' => $canEdit ? $val : ($val === "1" ? "Enabled" : "Disabled")
+                'value' => $canEdit ? $val : ("$val" === "1" ? "Enabled" : "Disabled")
             ));
         }
 
@@ -1835,20 +1793,23 @@ class JXconfig {
         foreach ($params as $param) {
             $val_new = $form->getValue($param);
             $val_org = $form->getValue("{$param}_org");
+
             $val_subs = $subscription->get($param);
             $equalToSub = $val_new === $val_subs;
             $differentThanBefore = $val_new !== $val_org;
 
-//            $str = "$param val_org: $val_org, val_new: $val_new, val_sub = $val_subs, equalToSub: $equalToSub, differentThanBefore: $differentThanBefore";
-//            StatusMessage::addDebug($str);
-
+            $val_to_save = $val_org;
             if ($equalToSub) {
-                $domain->set($param, null);
-            } else {
-                if ($differentThanBefore) {
-                    $domain->set($param, $val_new);
-                    $domain->configChanged = true;
-                }
+                $val_to_save = null;
+            }
+            else if ($differentThanBefore) {
+                $val_to_save = $val_new;
+            }
+
+
+            if ($differentThanBefore) {
+                $domain->set($param, $val_to_save);
+                $domain->configChanged = true;
             }
         }
     }

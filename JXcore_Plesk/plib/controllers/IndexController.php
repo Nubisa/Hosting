@@ -11,8 +11,8 @@ class IndexController extends pm_Controller_Action
         require_once("CustomStatus.php");
         if(CustomStatus::CheckStatusRender($this)) // Plesk12
         {
-            $this->_status = new CustomStatus($this->_helper);
-            $this->view->status = new CustomStatus($this->_helper);
+            $this->_status = new CustomStatus($this->view);
+            $this->view->status = $this->_status;
         }
 
        // $this->_status->addMessage("info", "aaaa");
@@ -23,7 +23,7 @@ class IndexController extends pm_Controller_Action
 
         require_once("common.php");
 
-        $this->common = new Common($this, $this->view->status);
+        $this->common = new Common($this, $this->_status);
 
         if (Common::$isAdmin) {
 
@@ -96,6 +96,7 @@ class IndexController extends pm_Controller_Action
         ));
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
+            $this->_status->beforeRedirect = true;
             $this->_helper->json(array('redirect' => pm_Context::getBaseUrl()));
         }
 
@@ -147,6 +148,7 @@ class IndexController extends pm_Controller_Action
         ));
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
+            $this->_status->beforeRedirect = true;
             $actionClearValue = $this->getRequest()->getParam($sidClearLog);
             $actionClearPressed = $actionClearValue === "clear";
 
@@ -227,6 +229,7 @@ class IndexController extends pm_Controller_Action
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
 
+            $this->_status->beforeRedirect = true;
             if (!Common::isJXValid()) {
                 $out = null;
 
@@ -385,6 +388,8 @@ class IndexController extends pm_Controller_Action
 
             if ($req->isPost() && $form->isValid($req->getPost())) {
 
+                $this->_status->beforeRedirect = true;
+
                 $monitorAction = in_array($req->getParam($sidMonitor), ["start", "stop"]);
                 $installAction = in_array($req->getParam($sidJXcore), ["install", "uninstall"]);
 
@@ -393,17 +398,7 @@ class IndexController extends pm_Controller_Action
                 } else if ($installAction) {
                     $this->JXcoreInstallUninstall($req->getParam($sidJXcore));
                 } else {
-//                    $params = [Common::sidMonitorEnabled, Common::sidJXcoreMinimumPortNumber, Common::sidJXcoreMaximumPortNumber];
                     $params = [Common::sidJXcoreMinimumPortNumber, Common::sidJXcoreMaximumPortNumber,
-
-//                        Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess,
-
-//                        Common::sidDomainJXcoreAppMaxCPULimit,
-//                        Common::sidDomainJXcoreAppMaxCPUInterval,
-//                        Common::sidDomainJXcoreAppMaxMemLimit,
-//                        Common::sidDomainJXcoreAppAllowCustomSocketPort,
-//                        Common::sidDomainJXcoreAppAllowSysExec,
-//                        Common::sidDomainJXcoreAppAllowLocalNativeModules
                     ];
 
 
@@ -441,19 +436,12 @@ class IndexController extends pm_Controller_Action
             'value' => ""
         ));
 
-//        $form->addElement('simpleText', "installedModules", array(
-//            'label' => 'Installed modules',
-//            'value' => count($installed_modules) ? join("<br>", $installed_modules) : "None",
-//            'escape' => false
-//        ));
-
         $nameToInstall = trim($this->getRequest()->getParam("names"));
         $form->addElement('text', "names", array(
             'label' => 'Install new module',
             'value' => $nameToInstall,
             'validators' => array(new MyValid_Module()),
             'filters' => array('StringTrim'),
-            //'description' => 'Name, or names (comma separated) of NPM modules to install.',
             'description' => 'Name of NPM module to install.',
             'escape' => false
         ));
@@ -464,6 +452,8 @@ class IndexController extends pm_Controller_Action
         ));
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
+
+            $this->view->status->beforeRedirect = true;
 
             $nameToRemove = trim($this->getRequest()->getParam("remove"));
             if ($nameToRemove) {

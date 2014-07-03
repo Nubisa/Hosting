@@ -12,8 +12,8 @@ class SubscriptionController extends pm_Controller_Action
         require_once("CustomStatus.php");
         if(CustomStatus::CheckStatusRender($this)) // Plesk12
         {
-            $this->_status = new CustomStatus($this->_helper);
-            $this->view->status = new CustomStatus($this->_helper);
+            $this->_status = new CustomStatus($this->view);
+            $this->view->status = new CustomStatus($this->view);
         }
 
 
@@ -73,6 +73,8 @@ class SubscriptionController extends pm_Controller_Action
         ));
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
+
+            $this->_status->beforeRedirect = true;
 
             $params = [
                 Common::sidDomainJXcoreAppMaxCPULimit,

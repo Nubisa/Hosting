@@ -11,8 +11,8 @@ class DomainController extends pm_Controller_Action
         require_once("CustomStatus.php");
         if(CustomStatus::CheckStatusRender($this)) // Plesk12
         {
-            $this->_status = new CustomStatus($this->_helper);
-            $this->view->status = new CustomStatus($this->_helper);
+            $this->_status = new CustomStatus($this->view);
+            $this->view->status = new CustomStatus($this->view);
         }
 
         $this->view->pageTitle = 'JXcore - single domain configuration';
@@ -110,7 +110,7 @@ class DomainController extends pm_Controller_Action
         $form->addElement($canEdit ? 'text' : 'simpleText', Common::sidDomainJXcoreAppPath, array(
             'label' => 'Application file path',
             'value' => $this->domain->getAppPathOrDefault(false),
-            'validators' => array($validFileName),
+            'validators' => $canEdit ? array($validFileName) : array(),
             'filters' => array('StringTrim'),
             'required' => false,
             'description' => "The path is relative to domain root folder.",
@@ -146,6 +146,7 @@ class DomainController extends pm_Controller_Action
         ));
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
+            $this->_status->beforeRedirect = true;
 
             $actionValue = $this->getRequest()->getParam(Common::sidDomainJXcoreEnabled);
             $actionButtonPressed = in_array($actionValue, ["start", "stop"]);
@@ -220,6 +221,7 @@ class DomainController extends pm_Controller_Action
         ));
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
+            $this->_status->beforeRedirect = true;
             $actionClearValue = $this->getRequest()->getParam($sidClearLog);
             $actionClearPressed = $actionClearValue === "clear";
 
@@ -280,6 +282,7 @@ class DomainController extends pm_Controller_Action
         ));
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
+            $this->_status->beforeRedirect = true;
             $actionGhostValue = $this->getRequest()->getParam($sidGhostBlogging);
             $actionGhostPressed = in_array($actionGhostValue, ["start", "stop"]);
 

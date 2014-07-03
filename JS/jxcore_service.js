@@ -131,24 +131,32 @@ var srv = http.createServer(function (req, res) {
 
         if (parsed.query.nginx) {
             var cmd = null;
-            var answer = null;
-            if (parsed.query.nginx == "reload") {
-                cmd = "/etc/init.d/nginx reload";
-            } else if (parsed.query.nginx == "start") {
-                cmd = "/opt/psa/admin/sbin/nginxmng -e";
-            }
-            if (parsed.query.nginx == "check") {
-                var tmp = "/opt/psa/admin/sbin/nginxmng -s";
-                var ret = jxcore.utils.cmdSync(tmp);
-                answer = ret.out;
-            }
+            var answer = "Unknown command.";
+            if (parsed.query.nginx == "remove") {
 
-            if (cmd) {
-                var ret = jxcore.utils.cmdSync(cmd);
-                answer = ret.exitCode ? ret.out : "OK";
-            } else {
-                if (!answer)
-                    answer = "Unknown command.";
+                var dir = "/etc/nginx/jxcore.conf.d"
+
+                if (parsed.query.domain) {
+                    var fname =  path.join(dir, "/", parsed.query.domain + ".conf");
+                    console.log("Removing ", fname)
+                    if (fs.existsSync(fname)) {
+                        try {
+                            fs.unlinkSync(fname);
+                        } catch (ex) {
+                            console.log("Cannot remove ", ex);
+                        }
+
+                        answer = fs.existsSync(fname) ? "Could not remove nginx config for the application." : "OK";
+                    } else {
+                       answer = "File does not exist."
+                    }
+
+                } else if (parsed.query.all && parsed.query.all == 1) {
+                    var fname = "/etc/nginx/conf.d/jxcore.conf";
+                    jxcore.utils.cmdSync("rm -rf " + dir + "; rm -f " + fname + "; /etc/init.d/nginx reload");
+
+                    answer = fs.existsSync(fname) || fs.existsSync(dir) ? "Could not remove nginx configs." : "OK";;
+                }
             }
 
             writeAnswer(res, answer);

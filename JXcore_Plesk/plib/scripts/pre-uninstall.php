@@ -35,16 +35,7 @@ if (file_exists($jxpath)) {
 }
 
 
-//
-//@exec("whoami; rm -rf /etc/nginx/jxcore.conf.d 2>&1", $out, $ret);
-//if ($ret) {
-//    echo "Cannot remove nginx configuration files for apps: " . join("<br>", $out) . " Exit code: $ret";
-//    exit(1);
-//}
-//
-//@unlink("/etc/nginx/conf.d/jxcore.conf");
-
-Common::reloadNginx();
+Common::callService("nginx", "remove&all=1", null, null);
 
 $request = <<<APICALL
 <ui>
