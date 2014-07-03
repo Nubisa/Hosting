@@ -60,7 +60,6 @@ class DomainController extends pm_Controller_Action
         $json = Common::getMonitorJSON();
         $monitorRunning = $json !== null;
         $appRunning = $this->domain->isAppRunning();
-        $canEdit = Common::$isAdmin;
 
         $sidRestart = "restart";
 
@@ -105,12 +104,12 @@ class DomainController extends pm_Controller_Action
             'description' => $jxEnabled ? "" : "Application will start automatically when JXcore support is enabled."
         ));
 
-        $validFileName = $canEdit ? new MyValid_FileName() : null;
-        if ($validFileName) $validFileName->domain = $this->domain;
-        $form->addElement($canEdit ? 'text' : 'simpleText', Common::sidDomainJXcoreAppPath, array(
+        $validFileName =  new MyValid_FileName();
+        $validFileName->domain = $this->domain;
+        $form->addElement('text', Common::sidDomainJXcoreAppPath, array(
             'label' => 'Application file path',
             'value' => $this->domain->getAppPathOrDefault(false),
-            'validators' => $canEdit ? array($validFileName) : array(),
+            'validators' => array($validFileName),
             'filters' => array('StringTrim'),
             'required' => false,
             'description' => "The path is relative to domain root folder.",
@@ -127,7 +126,16 @@ class DomainController extends pm_Controller_Action
 
         JXconfig::addConfigToForm($form, $this->ID, true);
 
-        if ($canEdit && $appRunning) {
+        Common::addHR($form);
+
+        $val = $this->domain->getAppLogWebAccess();
+        $form->addElement('checkbox', Common::sidDomainAppLogWebAccess, array(
+            'label' => 'Application\'s log web access',
+            'description' => "Will be available on http://" . $this->domain->name . "/" . basename($this->domain->appLogDir) . "/index.txt",
+            'value' => $val
+        ));
+
+        if ($appRunning) {
             Common::addHR($form);
             $form->addElement('simpleText', "someWarning", array(
                 'label' => '',
@@ -157,7 +165,7 @@ class DomainController extends pm_Controller_Action
             if ($actionButtonPressed) {
                 $this->domain->set(Common::sidDomainJXcoreEnabled, $actionValue == "start" ? 1 : 0);
             } else
-                if (!$actionButtonPressed && !$actionRestartPressed && $canEdit) {
+                if (!$actionButtonPressed && !$actionRestartPressed) {
 
                     $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess];
 

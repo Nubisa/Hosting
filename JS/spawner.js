@@ -152,7 +152,9 @@ if (!isRoot || !respawned) {
 //        log("checking " + str + JSON.stringify(ret));
         if (ret.out.toString().trim() !== "OK") {
             log("User " + user + " has no read access to file " + path, true);
-            process.exit(7);
+            setTimeout(function(){
+                process.exit(7);
+            }, 1500);
         }
     };
 
@@ -224,7 +226,7 @@ if (!isRoot || !respawned) {
                 exitting = true;
                 setTimeout(function(){
                     process.exit();
-                },1500);
+                },5000);
             }
         });
     }
@@ -243,6 +245,9 @@ if (!isRoot || !respawned) {
 //                log("Cannot delete config file: " + ex);
 //            }
 
+            log("Starting watch folder");
+
+
             root_functions.watch(path.dirname(file), logPathDir, function (param) {
 
                 if (param.clearlog && out && out != "ignore" ) {
@@ -258,7 +263,7 @@ if (!isRoot || !respawned) {
                     }
                 }
 
-//                log("CHANGED!!! " + fname + ", file = " + file);
+               // log("CHANGED!!! " + fname + ", file = " + file);
 
                 if (param.fname) {
                     var restart = false;
@@ -269,10 +274,18 @@ if (!isRoot || !respawned) {
 
                             try {
                                 if (child) {
-                                    exitting = true;
+                                    exiting = true;
                                     process.kill(child.pid);
                                     child = null;
-                                    exitting = false;
+                                    var counter = 0;
+                                    setInterval(function(){
+                                        counter++;
+
+                                        if(counter>=10 || fs.existsSync(fname)){
+                                            process.exit();
+                                        }
+                                    }, 500);
+                                    return;
                                 }
                             } catch (ex) {
                             }
@@ -288,7 +301,9 @@ if (!isRoot || !respawned) {
                         log("Files changed - restarting the application.");
                         //                var ret = jxcore.utils.cmdSync('"' + process.execPath + "' monitor kill " + __filename);
                         //                log('"' + process.execPath + "' monitor kill " + __filename + " : " + JSON.stringify(ret));
+                       setTimeout(function(){
                         process.exit(77);
+                       },2000);
                     }
                 }
             });
@@ -311,9 +326,7 @@ if (!isRoot || !respawned) {
                 } catch (ex) {
                 }
                 try {
-                    if (!code) {
-                        process.exit(77);
-                    }
+                    process.exit(77);
                 } catch (ex) {
                 }
             }, 1500);

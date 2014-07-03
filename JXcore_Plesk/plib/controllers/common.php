@@ -1769,19 +1769,6 @@ class JXconfig {
             'value' =>  $canEdit ? $val : ("$val" === "1" ? "Allow" : "Disallow")
         ));
 
-        if ($isDomain) {
-            Common::addHR($form);
-
-            $domain = Common::getDomain($id);
-
-            $val = $domain->getAppLogWebAccess();
-            $form->addElement($typeChk, $canEdit ? Common::sidDomainAppLogWebAccess : ("field" . ($tmpID++)), array(
-                'label' => 'Application\'s log web access',
-                'description' => "Will be available on http://" . $domain->name . "/" . basename($domain->appLogDir) . "/index.txt",
-                'value' => $canEdit ? $val : ("$val" === "1" ? "Enabled" : "Disabled")
-            ));
-        }
-
     }
 
     public static function saveDomainValues($form, $domain) {

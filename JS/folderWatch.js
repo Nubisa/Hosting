@@ -28,7 +28,7 @@ var watch_me = function(loc){
         if(filename != null && filename != undefined){
             if(change_list[_this.location] == undefined){
                 change_list[_this.location] = filename;
-                setTimeout(fireAll, 100);
+                setTimeout(fireAll, 500);
             }
         }
     };

@@ -11,13 +11,8 @@ exports.watch = function (dir, appLogDir, cb) {
 
     //var dir = path.dirname(appFileName);
     fw.watch(dir);
-    console.log("watching", dir);
-
-    var changed = false;
 
     fw.on('change', function (dir, file) {
-
-        if (changed) return;
 
         var fullPath = path.join(dir, "/", file);
 
@@ -26,7 +21,7 @@ exports.watch = function (dir, appLogDir, cb) {
         // skip log files
         var d1 = path.normalize(dir + "/");
         var d2 = path.normalize(appLogDir + "/");
-//        console.log("dir",d1, "appLogDir", d2);
+
         if (d1.slice(0, d2.length) === d2) {
             if (cb && file.indexOf("clearlog.txt") != -1 && fs.existsSync(path.normalize(dir ,fullPath))) {
                 cb({ clearlog: true, dir: dir, file : file });
@@ -34,15 +29,9 @@ exports.watch = function (dir, appLogDir, cb) {
             return;
         }
 
-        changed = true;
-
         if (cb) {
-            setTimeout(function () {
-                cb({ path: fullPath });
-                changed = false;
-            }, 500);
+            cb({ path: fullPath });
         }
-        console.log("changed", dir, file);
     });
 };
 

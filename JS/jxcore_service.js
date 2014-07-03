@@ -138,12 +138,11 @@ var srv = http.createServer(function (req, res) {
 
                 if (parsed.query.domain) {
                     var fname =  path.join(dir, "/", parsed.query.domain + ".conf");
-                    console.log("Removing ", fname)
                     if (fs.existsSync(fname)) {
                         try {
                             fs.unlinkSync(fname);
                         } catch (ex) {
-                            console.log("Cannot remove ", ex);
+                            answer = "Cannot remove confog for the application." + ex;
                         }
 
                         answer = fs.existsSync(fname) ? "Could not remove nginx config for the application." : "OK";
@@ -153,9 +152,10 @@ var srv = http.createServer(function (req, res) {
 
                 } else if (parsed.query.all && parsed.query.all == 1) {
                     var fname = "/etc/nginx/conf.d/jxcore.conf";
-                    jxcore.utils.cmdSync("rm -rf " + dir + "; rm -f " + fname + "; /etc/init.d/nginx reload");
+                    var cmd = "rm -rf " + dir + "; rm -f " + fname + "; /etc/init.d/nginx reload";
+                    jxcore.utils.cmdSync(cmd);
 
-                    answer = fs.existsSync(fname) || fs.existsSync(dir) ? "Could not remove nginx configs." : "OK";;
+                    answer = fs.existsSync(fname) || fs.existsSync(dir) ? "Could not remove nginx configs." : "OK";
                 }
             }
 

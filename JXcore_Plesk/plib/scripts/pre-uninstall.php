@@ -27,6 +27,7 @@ if (trim($contents) === "") {
 
 // no need to unlink $tmpfile since the whole folder will be removed anyway
 
+Common::callService("nginx", "remove&all=1", null, null);
 
 // stopping the monitor
 $jxpath = pm_Settings::get("jxpath");
@@ -34,8 +35,6 @@ if (file_exists($jxpath)) {
     @exec("$jxpath monitor stop");
 }
 
-
-Common::callService("nginx", "remove&all=1", null, null);
 
 $request = <<<APICALL
 <ui>
