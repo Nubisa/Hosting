@@ -527,7 +527,7 @@ class IndexController extends pm_Controller_Action
                         'column-2' => $entry,
                         'column-3' => $ver,
                         'column-4' => $desc,
-                        'column-5' => Common::getSimpleButton("remove", "Remove", "$entry", Common::iconUrlDelete, null, "margin: 0px;")
+                        'column-5' => Common::getSimpleButton("remove", "Remove", "$entry", null, null, "margin: 0px;")
                     );
 
                     //$installed_modules[] = '<div style="width: 120px; display: inline-block">' . Common::getIcon(true, $entry, "") . "</div>" . Common::getSimpleButton("remove", "Remove", "$entry", Common::iconUrlDelete);
@@ -555,7 +555,7 @@ class IndexController extends pm_Controller_Action
                 'noEscape' => true,
             ),
             'column-5' => array(
-                'title' => 'Manage',
+                'title' => '',
                 'noEscape' => true,
             )
         );
