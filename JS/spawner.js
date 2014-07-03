@@ -10,7 +10,7 @@ var os = require("os");
 var whoami = jxcore.utils.cmdSync("whoami").out.toString().trim();
 var isRoot = whoami.toString().trim() === "root";
 var respawned = JSON.stringify(process.argv).indexOf("respawn_id") > -1;
-var exitting = false;
+var exiting = false;
 
 var log = function (str, error) {
     var str = "Spawner " + (error ? "error" : "info" ) + ":\t" + str;
@@ -19,13 +19,9 @@ var log = function (str, error) {
 
     if (!logPath) return;
 
-    //if (isRoot) {
     if (fs.existsSync(logPath)) {
         fs.appendFileSync(logPath, str + os.EOL);
     }
-    //} //else {
-//        console.log(str);
-    //}
 };
 
 
@@ -45,10 +41,6 @@ if (!logPath) {
     process.exit(7);
 }
 var logPathDir = path.dirname(logPath);
-
-
-//console.log("logPath", logPath);
-//console.log("logDir", logPathDir);
 
 // searching for -u arg and converting it into int uid
 var uid = null;
@@ -95,25 +87,24 @@ if (!isRoot || !respawned) {
             log("Did not subscribed (as user " + whoami + ") to the monitor: " + txt, true);
         } else {
             log("Subscribed successfully: " + txt);
-
+/*
             var str = "Exiting, to be respawned by JXcore monitor."
             if (!isRoot) {
                 str = "I am not a root. " + str;
             }
-            log(str);
-            process.exit(77);
+            log(str);*/
+            setTimeout(function(){process.exit(77)}, 1000);
         }
 
     }, function (delay) {
-        //log("Subscribing is delayed by " + delay+ " ms.");
         setTimeout(function () {
+
         }, delay + 5000);
     });
 
 } else {
 
     var out = 'ignore';
-//    var err = 'ignore';
 
     if (logPath) {
         if (!fs.existsSync(logPathDir)) {
@@ -136,8 +127,6 @@ if (!isRoot || !respawned) {
 
         try {
             out = fs.openSync(logPath, 'a');
-//            err = fs.openSync(logPath, 'a');
-
         } catch (ex) {
             // logging will no be possible, but app can still run
         }
@@ -152,6 +141,7 @@ if (!isRoot || !respawned) {
 //        log("checking " + str + JSON.stringify(ret));
         if (ret.out.toString().trim() !== "OK") {
             log("User " + user + " has no read access to file " + path, true);
+            exiting = true;
             setTimeout(function(){
                 process.exit(7);
             }, 1500);
@@ -222,8 +212,8 @@ if (!isRoot || !respawned) {
         });
 
         child.on('exit', function () {
-            if (!exitting) {
-                exitting = true;
+            if (!exiting) {
+                exiting = true;
                 setTimeout(function(){
                     process.exit();
                 },5000);
@@ -237,15 +227,6 @@ if (!isRoot || !respawned) {
             log("Did not subscribed (as root) to the monitor: " + txt, true);
         } else {
             log("Subscribed successfully: " + txt);
-
-//            // deleting config file
-//            try {
-//                if (configFileIsDefault) fs.unlinkSync(configFile);
-//            } catch (ex) {
-//                log("Cannot delete config file: " + ex);
-//            }
-
-            log("Starting watch folder");
 
 
             root_functions.watch(path.dirname(file), logPathDir, function (param) {
@@ -263,7 +244,8 @@ if (!isRoot || !respawned) {
                     }
                 }
 
-               // log("CHANGED!!! " + fname + ", file = " + file);
+                if(exiting)
+                    return;
 
                 if (param.fname) {
                     var restart = false;
@@ -275,13 +257,18 @@ if (!isRoot || !respawned) {
                             try {
                                 if (child) {
                                     exiting = true;
-                                    process.kill(child.pid);
+
+                                    try{
+                                        process.kill(child.pid);
+                                    }catch(ex){};
+
                                     child = null;
                                     var counter = 0;
+                                    var _fname = fname;
                                     setInterval(function(){
                                         counter++;
 
-                                        if(counter>=10 || fs.existsSync(fname)){
+                                        if(counter>=10 || fs.existsSync(_fname)){
                                             process.exit();
                                         }
                                     }, 500);
@@ -298,11 +285,12 @@ if (!isRoot || !respawned) {
                     }
 
                     if (restart) {
+                        exiting = true;
                         log("Files changed - restarting the application.");
                         //                var ret = jxcore.utils.cmdSync('"' + process.execPath + "' monitor kill " + __filename);
                         //                log('"' + process.execPath + "' monitor kill " + __filename + " : " + JSON.stringify(ret));
                        setTimeout(function(){
-                        process.exit(77);
+                           process.exit(77);
                        },2000);
                     }
                 }
@@ -316,8 +304,8 @@ if (!isRoot || !respawned) {
     });
 
     var exit = function (code) {
-        if(!exitting){
-            exitting = true;
+        if(!exiting){
+            exiting = true;
             setTimeout(function(){
                 try {
                     if (child) {
