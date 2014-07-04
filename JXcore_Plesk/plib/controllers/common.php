@@ -1091,12 +1091,12 @@ class DomainInfo
         $ret = null;
 
         if (!$wasSet) {
+//            StatusMessage::addDebug("OK returning val sub $vals for $sid");
             $ret = $vals;
         } else {
             $ret = $vald;
+//            StatusMessage::addError("OK returning val dom $vald for $sid");
         }
-
-       // StatusMessage::addDebug("OK returning val $ret for $sid");
 
         return $ret;
     }
@@ -1631,24 +1631,6 @@ class JXconfig {
 
         if ($isDomain) {
             $domain = Common::getDomain($id);
-//            $sub = $domain->getSubscription();
-//
-//            $vald = $domain->get($sid);
-//            $vals = $sub->get($sid);
-//
-//            $wasSet = $domain->wasSet($sid);
-//
-//            $edits = [Common::sidDomainJXcoreAppMaxMemLimit, Common::sidDomainJXcoreAppMaxCPULimit, Common::sidDomainJXcoreAppMaxCPUInterval];
-//            if (in_array($sid, $edits) && !$vald && "$vald" !== "0" )
-//                $wasSet = false;
-//
-//            $ret = null;
-//            if (!$wasSet) {
-//                $ret = $vals;
-//            } else {
-//                $ret = $vald;
-//            }
-
             $ret = $domain->getFinalConfigValue($sid);
 
             $form->addElement('hidden', "{$sid}_org", array(
@@ -1776,11 +1758,11 @@ class JXconfig {
                 //StatusMessage::addDebug("Saving org $val_org to $param");
             }
 
-
-            if ($differentThanBefore) {
+            // we save always, even null values !
+            //if ($differentThanBefore) {
                 $domain->set($param, $val_to_save);
                 $domain->configChanged = true;
-            }
+            //}
         }
     }
 
