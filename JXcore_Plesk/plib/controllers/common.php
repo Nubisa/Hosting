@@ -10,8 +10,8 @@
  *
  * known issues:
  *      - when extension is uninstalled, and we upload some files to folders, where extension generally resides:
- *      1. /opt/psa/var/modules/jxcore_support/
- *      2. /opt/psa/admin/plib/modules/jxcore_support/
+ *      1. /usr/local/psa/var/modules/jxcore_support/
+ *      2. /usr/local/psa/admin/plib/modules/jxcore_support/
  *      then installimng an extension may fail with:
  *      Error: Unable to install the extension: filemng failed: filemng: Error occurred during /bin/cp command.
  *
@@ -546,7 +546,7 @@ class Common
 
     public static function updateCron() {
         // modifying crontab
-        $binary = "/opt/psa/admin/bin/crontabmng";
+        $binary = "/usr/local/psa/admin/bin/crontabmng";
 
         $tmpfile = pm_Context::getVarDir() . "mycron";
         @exec("$binary get root > $tmpfile");
@@ -590,7 +590,7 @@ class Common
         $out = null;
         $ret = null;
 
-        $binary = "/opt/psa/admin/bin/crontabmng";
+        $binary = "/usr/local/psa/admin/bin/crontabmng";
 
         $tmpfile = pm_Context::getVarDir() . "mycron_immediate";
         @unlink($tmpfile);
@@ -614,7 +614,7 @@ class Common
 
         $contents = Common::saveBlockToText($contents, "JXcore-immediate", $cmd, null);
 
-        // a NewLine characted was needed on Nubisa's production server
+        // a NewLine character was needed on Nubisa's production server
         $contents = trim($contents) . "\n";
         file_put_contents($tmpfile, $contents);
         @exec("$binary set root $tmpfile 2>&1", $out, $ret);
@@ -801,8 +801,8 @@ class Common
     private static function enableHttpProxy() {
         //return;
 
-        $cmd1 = "/opt/psa/admin/bin/httpd_modules_ctl -s";
-        $cmd2 = "/opt/psa/admin/bin/httpd_modules_ctl -e proxy_http";
+        $cmd1 = "/usr/local/psa/admin/bin/httpd_modules_ctl -s";
+        $cmd2 = "/usr/local/psa/admin/bin/httpd_modules_ctl -e proxy_http";
 
         $out = null;
         $ret = null;
@@ -836,7 +836,7 @@ class Common
      */
     private static function checkNginx($verbose = true)
     {
-        $cmd = '/opt/psa/admin/bin/nginxmng -s 2>&1';
+        $cmd = '/usr/local/psa/admin/bin/nginxmng -s 2>&1';
         @exec($cmd, $out, $ret);
 
         if (!$ret) {
@@ -854,7 +854,7 @@ class Common
 
     private static function enableNginx()
     {
-        $cmd2 = "/opt/psa/admin/bin/nginxmng -e 2>&1";
+        $cmd2 = "/usr/local/psa/admin/bin/nginxmng -e 2>&1";
 
         if (!self::checkNginx(false)) {
             $out = null;
@@ -875,7 +875,7 @@ class Common
     public static function reloadNginx() {
 
         if (self::checkNginx(false) && !self::$nginxReloaded) {
-            $cmd = "/opt/psa/admin/bin/nginx_control -r";
+            $cmd = "/usr/local/psa/admin/bin/nginx_control -r";
             @exec($cmd, $out, $ret);
 
 //            StatusMessage::infoOrError($ret, "Nginx reloaded successfully.", "Cannot reload nginx. " . join("\n", $out) . ". Exit code: $ret." );
@@ -1090,11 +1090,13 @@ class DomainInfo
 
         $ret = null;
 
-        if (!$wasSet && $vals) {
+        if (!$wasSet) {
             $ret = $vals;
         } else {
             $ret = $vald;
         }
+
+        StatusMessage::addDebug("OK returning val $ret for $sid");
 
         return $ret;
     }
@@ -1621,18 +1623,6 @@ class JXconfig {
     public $globalModulePath = null; // string
     public $globalApplicationConfigPath = null; //string
 
-    private static function addOrgValue(&$form, $sid, $domainId, $isDomain) {
-
-        if (!$isDomain) return;
-
-        $domain = Common::getDomain($domainId);
-        $vald = $domain->get($sid);
-
-        $form->addElement('hidden', "{$sid}_org", array(
-            'value' => $vald
-        ));
-    }
-
 
     /*
      * Gets value for domain or subscription
@@ -1641,26 +1631,28 @@ class JXconfig {
 
         if ($isDomain) {
             $domain = Common::getDomain($id);
-            $sub = $domain->getSubscription();
+//            $sub = $domain->getSubscription();
+//
+//            $vald = $domain->get($sid);
+//            $vals = $sub->get($sid);
+//
+//            $wasSet = $domain->wasSet($sid);
+//
+//            $edits = [Common::sidDomainJXcoreAppMaxMemLimit, Common::sidDomainJXcoreAppMaxCPULimit, Common::sidDomainJXcoreAppMaxCPUInterval];
+//            if (in_array($sid, $edits) && !$vald && "$vald" !== "0" )
+//                $wasSet = false;
+//
+//            $ret = null;
+//            if (!$wasSet) {
+//                $ret = $vals;
+//            } else {
+//                $ret = $vald;
+//            }
 
-            $vald = $domain->get($sid);
-            $vals = $sub->get($sid);
-
-            $wasSet = $domain->wasSet($sid);
-
-            $edits = [Common::sidDomainJXcoreAppMaxMemLimit, Common::sidDomainJXcoreAppMaxCPULimit, Common::sidDomainJXcoreAppMaxCPUInterval];
-            if (in_array($sid, $edits) && !$vald && "$vald" !== "0" )
-                $wasSet = false;
-
-            $ret = null;
-            if (!$wasSet && $vals) {
-                $ret = $vals;
-            } else {
-                $ret = $vald;
-            }
+            $ret = $domain->getFinalConfigValue($sid);
 
             $form->addElement('hidden', "{$sid}_org", array(
-                'value' => $vald
+                'value' => $ret
             ));
             return $ret;
         } else {
@@ -1775,9 +1767,13 @@ class JXconfig {
             $val_to_save = $val_org;
             if ($equalToSub) {
                 $val_to_save = null;
+                StatusMessage::addDebug("Saving null to $param");
             }
             else if ($differentThanBefore) {
                 $val_to_save = $val_new;
+                StatusMessage::addDebug("Saving new $val_new to $param (old val = $val_org");
+            } else {
+                StatusMessage::addDebug("Saving org $val_org to $param");
             }
 
 

@@ -69,10 +69,9 @@ var srv = http.createServer(function (req, res) {
             console.log("Installing npm module. name:", name, "version:", version, "with cmd: ", cmd);
 
             var ret = jxcore.utils.cmdSync(cmd);
-            console.log(ret);
 
             var expectedModulePath = path.join(jxconfig.globalModulePath, "/node_modules/", name);
-            var answer = fs.existsSync(expectedModulePath) ? "OK" : ret.out;
+            var answer = fs.existsSync(expectedModulePath) ? "OK" : "Error. " + ret.out;
 
             writeAnswer(res, answer);
             return;
@@ -103,7 +102,6 @@ var srv = http.createServer(function (req, res) {
             try {
                 var modulesDir = path.normalize(jxconfig.globalModulePath + "/node_modules/");
                 var folders = fs.readdirSync(modulesDir);
-//                console.log("dir", folders);
 
                 var ret = [];
                 for (var a = 0, len = folders.length; a < len; a++) {
@@ -170,7 +168,6 @@ var srv = http.createServer(function (req, res) {
                 try {
                     var dir = path.dirname(process.execPath);
                     var files = fs.readdirSync(dir);
-//                    console.log("dir", files);
 
                     for (var a = 0, len = files.length; a < len; a++) {
                         if (files[a].slice(-4) === ".log") {
@@ -225,8 +222,6 @@ var srv = http.createServer(function (req, res) {
                                 }
 
                                 try {
-//                                    console.log("Killing " + info.pid);
-//                                    console.log(info);
                                     process.kill(info.pid);
 
                                     if (!killAll) writeAnswer(res, "OK");

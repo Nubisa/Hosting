@@ -11,7 +11,7 @@ if(!window.__addMessage){
         if( _content[o].className && _content[o].className.indexOf && _content[o].className.indexOf( 'heading' )>=0 ){
           _content[o].innerHTML+='<div class=\'msg-box msg-'+type+'\'>'
             + '<div class=\'msg-content\'><span class=\'title\'>' + xtype
-            + ':</span>' + message + '</div></div>';
+            + ': </span>' + message + '</div></div>';
           break;
         }
       }

@@ -847,7 +847,7 @@ class IndexController extends pm_Controller_Action
                             $output = $r === true ? "" : "Could not unzip JXcore downloaded package: {$zip}.";
                             $zipObj->close();
 
-                            $temporary = "/opt/psa/var/modules/jx";
+                            $temporary = "/usr/local/psa/var/modules/jx";
                             if (file_exists($temporary)) {
                                 copy($temporary,$unzippedJX);
                             }

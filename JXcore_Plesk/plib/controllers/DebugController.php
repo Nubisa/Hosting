@@ -58,7 +58,7 @@ class DebugController extends pm_Controller_Action
         $form = new pm_Form_Simple();
 
         // reading crontab
-        $binary = "/opt/psa/admin/bin/crontabmng";
+        $binary = "/usr/local/psa/admin/bin/crontabmng";
         $tmpfile = pm_Context::getVarDir() . "mycron";
         @exec("$binary get root > $tmpfile");
         $contents = file_get_contents($tmpfile);
@@ -95,7 +95,7 @@ class DebugController extends pm_Controller_Action
 
         $domain = Common::getDomain(7);
 
-//        $binary = "/opt/psa/admin/bin/crontabmng";
+//        $binary = "/usr/local/psa/admin/bin/crontabmng";
 //        $tmpfile = pm_Context::getVarDir() . "mycron";
 //        @exec("$binary get root > $tmpfile");
 //        $contents = file_get_contents($tmpfile);
@@ -127,7 +127,7 @@ class DebugController extends pm_Controller_Action
     private function testBlock(&$form) {
 
         $str = '#JXcore-immediate-Begin
-16 13 15 5 * /opt/psa/var/modules/jxcore_support/jxcore-for-plesk-startup.sh
+16 13 15 5 * /usr/local/psa/var/modules/jxcore_support/jxcore-for-plesk-startup.sh
 #JXcore-immediate-End
 
 #JXcore-Begin
