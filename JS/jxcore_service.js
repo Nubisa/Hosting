@@ -66,7 +66,7 @@ var srv = http.createServer(function (req, res) {
             }
 
             var cmd = "cd " + jxconfig.globalModulePath + "; '" + process.execPath + "' install " + nameAndVersion;
-            console.log("Installing npm module. name:", name, "version:", version, "with cmd: ", cmd);
+            //console.log("Installing npm module. name:", name, "version:", version, "with cmd: ", cmd);
 
             var ret = jxcore.utils.cmdSync(cmd);
 
