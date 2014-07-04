@@ -1096,7 +1096,7 @@ class DomainInfo
             $ret = $vald;
         }
 
-        StatusMessage::addDebug("OK returning val $ret for $sid");
+       // StatusMessage::addDebug("OK returning val $ret for $sid");
 
         return $ret;
     }
@@ -1767,13 +1767,13 @@ class JXconfig {
             $val_to_save = $val_org;
             if ($equalToSub) {
                 $val_to_save = null;
-                StatusMessage::addDebug("Saving null to $param");
+                //StatusMessage::addDebug("Saving null to $param");
             }
             else if ($differentThanBefore) {
                 $val_to_save = $val_new;
-                StatusMessage::addDebug("Saving new $val_new to $param (old val = $val_org");
+                //StatusMessage::addDebug("Saving new $val_new to $param (old val = $val_org");
             } else {
-                StatusMessage::addDebug("Saving org $val_org to $param");
+                //StatusMessage::addDebug("Saving org $val_org to $param");
             }
 
 
