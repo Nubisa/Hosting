@@ -1058,7 +1058,7 @@ class DomainInfo
         $changed = $old != $value;
         if ($changed) {
             $this->configChanged = true;
-            if (in_array($sid, [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess]))
+            if (in_array($sid, [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess, Common::sidDomainJXcoreAppPort, Common::sidDomainJXcoreAppPortSSL]))
                 $this->nginxConfigChanged = true;
         }
     }

@@ -135,26 +135,7 @@ if (!isRoot || !respawned) {
 
     var root_functions = require("./root_functions.js");
 
-    var checkAccess = function (path) {
-        var str = 'sudo -u "' + user + '" -- test -r "' + path + '"';
-        var ret = jxcore.utils.cmdSync(str);
-
-        log("Check access, cmd = " + str);
-        log("Check access, out = " + JSON.stringify(ret));
-
-        if (ret.exitCode !== 0) {
-            log("User " + user + " has no read access to file " + path, true);
-            exiting = true;
-            setTimeout(function(){
-                process.exit(7);
-            }, 1500);
-        }
-    };
-
     var file = options.file;
-
-    // disabling this. on centos root had: sorry, you must have a tty to run sudo
-    //checkAccess(pathModule.dirname(file));
 
     // ########  saving nginx conf
     var confDir = "/etc/nginx/jxcore.conf.d/";
@@ -216,7 +197,7 @@ if (!isRoot || !respawned) {
         if (err) {
             log("Did not subscribed (as root) to the monitor: " + txt, true);
         } else {
-            log("Subscribed successfully : " + txt);
+            log("Subscribed successfully: " + txt);
 
             try{
                 runApp();
@@ -224,8 +205,6 @@ if (!isRoot || !respawned) {
                 exiting = true;
                 process.exit();
             };
-
-            var appFileExistedBefore = fs.existsSync(file);
 
             root_functions.watch(pathModule.dirname(file), logPathDir, function (param) {
 
@@ -243,17 +222,9 @@ if (!isRoot || !respawned) {
                     return;
                 }
 
-                var appFileExistsNow = fs.existsSync(file);
-                var appFileExistedBefore_org = appFileExistedBefore;
-                appFileExistedBefore = appFileExistsNow;
-
-//                log("Changed file: " + JSON.stringify(param));
-//                log("existedBefore_org: " + appFileExistedBefore_org + ", exists now: " + appFileExistsNow);
-
                 var _extname = pathModule.extname(param.path).toLowerCase();
                 if(exiting || (_extname != '.js' && _extname != ".jx"))
-                    if (appFileExistsNow === appFileExistedBefore_org)
-                        return;
+                    return;
 
                 exiting = true;
 
@@ -263,17 +234,10 @@ if (!isRoot || !respawned) {
 
                     if(counter>=6 || fs.existsSync(file)){
                         clearInterval(_inter);
-                        if (appFileExistsNow) {
-                            log(appFileExistedBefore_org ? "Application file has been changed. Restarting." : "Application file has been uploaded. Launching.");
-                        }
-                        else if (appFileExistedBefore_org) {
-                            log("Application file has been removed. Restarting and waiting for a new file.");
-                        }
+
                         process.exit(77);
                     }
                 }, 500);
-
-
             });
 
         }
