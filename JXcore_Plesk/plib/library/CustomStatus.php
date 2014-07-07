@@ -1,9 +1,9 @@
 <?php
 // !!! We needed to do this hack for Plesk 12 since the status messages weren't showing on extension
 
-class CustomStatus
+class Modules_JxcoreSupport_CustomStatus
 {
-    function CustomStatus($_helper){
+    function Modules_JxcoreSupport_CustomStatus($_helper){
         $this->host = $_helper;
         $this->messageId = 0;
 
@@ -16,7 +16,6 @@ class CustomStatus
             $this->host->messages = $script;
         else
             $this->host->messages .= $script;
-
     }
 
 

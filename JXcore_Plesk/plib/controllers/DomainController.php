@@ -8,11 +8,10 @@ class DomainController extends pm_Controller_Action
     {
         parent::init();
 
-        require_once("CustomStatus.php");
-        if(CustomStatus::CheckStatusRender($this)) // Plesk12
+        if(Modules_JxcoreSupport_CustomStatus::CheckStatusRender($this)) // Plesk12
         {
-            $this->_status = new CustomStatus($this->view);
-            $this->view->status = new CustomStatus($this->view);
+            $this->_status = new Modules_JxcoreSupport_CustomStatus($this->view);
+            $this->view->status = new Modules_JxcoreSupport_CustomStatus($this->view);
         }
 
         $this->view->pageTitle = 'JXcore - single domain configuration';
@@ -28,8 +27,7 @@ class DomainController extends pm_Controller_Action
             )
         );
 
-        require_once("common.php");
-        $this->common = new Common($this, $this->_status);
+        $this->common = new Modules_JxcoreSupport_Common($this, $this->_status);
 
         $this->ID = $this->getRequest()->getParam('id');
         if (!ctype_digit($this->ID)) unset($this->ID);
@@ -45,8 +43,8 @@ class DomainController extends pm_Controller_Action
             pm_Settings::set("currentDomainId" . pm_Session::getClient()->getId(), $this->ID);
         }
 
-        $this->domain = Common::getDomain(intval($this->ID));
-        $this->view->breadCrumb = 'Navigation: <a href="' . Common::$urlJXcoreDomains . '">Domains</a> -> ' . $this->domain->name;
+        $this->domain = Modules_JxcoreSupport_Common::getDomain(intval($this->ID));
+        $this->view->breadCrumb = 'Navigation: <a href="' . Modules_JxcoreSupport_Common::$urlJXcoreDomains . '">Domains</a> -> ' . $this->domain->name;
     }
 
     public function indexAction()
@@ -57,7 +55,7 @@ class DomainController extends pm_Controller_Action
 
     public function configAction()
     {
-        $json = Common::getMonitorJSON();
+        $json = Modules_JxcoreSupport_Common::getMonitorJSON();
         $monitorRunning = $json !== null;
         $appRunning = $this->domain->isAppRunning();
 
@@ -67,7 +65,7 @@ class DomainController extends pm_Controller_Action
 
         $jxEnabled = $this->domain->JXcoreSupportEnabled();
 
-        $form->addElement('hidden', Common::sidDomainJXcoreEnabled, array(
+        $form->addElement('hidden', Modules_JxcoreSupport_Common::sidDomainJXcoreEnabled, array(
             'value' => "nothing"
         ));
 
@@ -83,10 +81,10 @@ class DomainController extends pm_Controller_Action
         // $canEnable = $this->domain->canEnable();
         $canEnable = true;
         $button = $canEnable === true ?
-            Common::getButtonStartStop($jxEnabled, Common::sidDomainJXcoreEnabled, ["Enabled", "Enable"], ["Disabled", "Disable"]) :
-            Common::getIcon($jxEnabled, "Enabled", "Disabled");
+            Modules_JxcoreSupport_Common::getButtonStartStop($jxEnabled, Modules_JxcoreSupport_Common::sidDomainJXcoreEnabled, ["Enabled", "Enable"], ["Disabled", "Disable"]) :
+            Modules_JxcoreSupport_Common::getIcon($jxEnabled, "Enabled", "Disabled");
 
-        $restartButton = $monitorRunning && $jxEnabled ? Common::getSimpleButton($sidRestart, "Restart application", "restart", "/theme/icons/16/plesk/show-all.png") : "";
+        $restartButton = $monitorRunning && $jxEnabled ? Modules_JxcoreSupport_Common::getSimpleButton($sidRestart, "Restart application", "restart", "/theme/icons/16/plesk/show-all.png") : "";
 
         $form->addElement('simpleText', 'status', array(
             'label' => 'JXcore',
@@ -95,7 +93,7 @@ class DomainController extends pm_Controller_Action
             'description' => $description
         ));
 
-        Common::addHR($form);
+        Modules_JxcoreSupport_Common::addHR($form);
 
         $form->addElement('simpleText', "txt1", array(
             'label' => 'Application status',
@@ -106,7 +104,7 @@ class DomainController extends pm_Controller_Action
 
         $validFileName =  new MyValid_FileName();
         $validFileName->domain = $this->domain;
-        $form->addElement('text', Common::sidDomainJXcoreAppPath, array(
+        $form->addElement('text', Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath, array(
             'label' => 'Application file path',
             'value' => $this->domain->getAppPathOrDefault(false),
             'validators' => array($validFileName),
@@ -116,7 +114,7 @@ class DomainController extends pm_Controller_Action
             'escape' => false
         ));
 
-        if (Common::$isAdmin) {
+        if (Modules_JxcoreSupport_Common::$isAdmin) {
             $form->addElement('simpleText', 'exampleSimpleText', array(
                 'label' => 'Domain root folder',
                 'escape' => false,
@@ -126,17 +124,17 @@ class DomainController extends pm_Controller_Action
 
         JXconfig::addConfigToForm($form, $this->ID, true);
 
-        Common::addHR($form);
+        Modules_JxcoreSupport_Common::addHR($form);
 
         $val = $this->domain->getAppLogWebAccess();
-        $form->addElement('checkbox', Common::sidDomainAppLogWebAccess, array(
+        $form->addElement('checkbox', Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess, array(
             'label' => 'Application\'s log web access',
             'description' => "Will be available on http://" . $this->domain->name . "/" . basename($this->domain->appLogDir) . "/index.txt",
             'value' => $val
         ));
 
         if ($appRunning) {
-            Common::addHR($form);
+            Modules_JxcoreSupport_Common::addHR($form);
             $form->addElement('simpleText', "someWarning", array(
                 'label' => '',
                 'escape' => false,
@@ -150,24 +148,24 @@ class DomainController extends pm_Controller_Action
         ));
 
         $form->addControlButtons(array(
-            'cancelLink' => Common::$urlJXcoreDomains
+            'cancelLink' => Modules_JxcoreSupport_Common::$urlJXcoreDomains
         ));
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
             $this->_status->beforeRedirect = true;
 
-            $actionValue = $this->getRequest()->getParam(Common::sidDomainJXcoreEnabled);
+            $actionValue = $this->getRequest()->getParam(Modules_JxcoreSupport_Common::sidDomainJXcoreEnabled);
             $actionButtonPressed = in_array($actionValue, ["start", "stop"]);
 
             $restartActionValue = $this->getRequest()->getParam($sidRestart);
             $actionRestartPressed = $restartActionValue === "restart";
 
             if ($actionButtonPressed) {
-                $this->domain->set(Common::sidDomainJXcoreEnabled, $actionValue == "start" ? 1 : 0);
+                $this->domain->set(Modules_JxcoreSupport_Common::sidDomainJXcoreEnabled, $actionValue == "start" ? 1 : 0);
             } else
                 if (!$actionButtonPressed && !$actionRestartPressed) {
 
-                    $params = [Common::sidDomainJXcoreAppPath, Common::sidDomainAppLogWebAccess];
+                    $params = [Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath, Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess];
 
                     foreach ($params as $param) {
                         $this->domain->set($param, $form->getValue($param));
@@ -185,12 +183,12 @@ class DomainController extends pm_Controller_Action
             if ($actionRestartPressed) {
                 $this->domain->configChanged = true;
             }
-            Common::updateAllConfigsIfNeeded();
+            Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded();
 
-            $this->_helper->json(array('redirect' => Common::$urlDomainConfig));
+            $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlDomainConfig));
         }
 
-        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
+        $this->view->buttonsDisablingScript = Modules_JxcoreSupport_Common::getButtonsDisablingScript();
         $this->view->form = $form;
     }
 
@@ -206,7 +204,7 @@ class DomainController extends pm_Controller_Action
 
         $form->addElement('simpleText', "size", array(
             'label' => 'Log file size',
-            'value' => filesize($this->domain->appLogPath) . " bytes" . Common::getSimpleButton($sidClearLog, "Clear log", "clear", Common::iconUrlDelete, null),
+            'value' => filesize($this->domain->appLogPath) . " bytes" . Modules_JxcoreSupport_Common::getSimpleButton($sidClearLog, "Clear log", "clear", Modules_JxcoreSupport_Common::iconUrlDelete, null),
             'escape' => false
         ));
 
@@ -240,12 +238,12 @@ class DomainController extends pm_Controller_Action
             } else {
                 pm_Settings::set($sidLastLinesCount . $this->ID, $val);
             }
-            $this->_helper->json(array('redirect' => Common::$urlDomainAppLog));
+            $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlDomainAppLog));
         }
 
         $this->readLog($val);
 
-        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
+        $this->view->buttonsDisablingScript = Modules_JxcoreSupport_Common::getButtonsDisablingScript();
         $this->view->form = $form;
     }
 
@@ -285,7 +283,7 @@ class DomainController extends pm_Controller_Action
 
         $form->addElement('simpleText', "ghost", array(
             'label' => 'Ghost blogging',
-            'value' => Common::getButtonStartStop($ghostInstalled, $sidGhostBlogging, ["Installed", "Install"], ["Not installed", "Remove"]),
+            'value' => Modules_JxcoreSupport_Common::getButtonStartStop($ghostInstalled, $sidGhostBlogging, ["Installed", "Install"], ["Not installed", "Remove"]),
             'escape' => false
         ));
 
@@ -299,10 +297,10 @@ class DomainController extends pm_Controller_Action
             if ($actionGhostPressed) {
                 $this->_status->addMessage('info', 'Ghost install presswed.');
             }
-            $this->_helper->json(array('redirect' => Common::$urlDomainAppLog));
+            $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlDomainAppLog));
         }
 
-        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
+        $this->view->buttonsDisablingScript = Modules_JxcoreSupport_Common::getButtonsDisablingScript();
         $this->view->form = $form;
     }
 

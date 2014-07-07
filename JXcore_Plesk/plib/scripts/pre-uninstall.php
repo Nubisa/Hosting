@@ -1,10 +1,8 @@
 <?php
 
-pm_Context::init('jxcore_support');
+pm_Context::init('jxcore-support');
 $id = pm_Settings::get('customButtonId');
 
-require_once("/usr/local/psa/admin/plib/modules/jxcore_support/controllers/common.php");
-//Common::updateCronImmediate(false);
 
 // JXcore crontab cleaning
 
@@ -27,7 +25,7 @@ if (trim($contents) === "") {
 
 // no need to unlink $tmpfile since the whole folder will be removed anyway
 
-Common::callService("nginx", "remove&all=1", null, null);
+Modules_JxcoreSupport_Common::callService("nginx", "remove&all=1", null, null);
 
 // stopping the monitor
 $jxpath = pm_Settings::get("jxpath");
@@ -60,10 +58,12 @@ try {
 
 } catch(PleskAPIParseException $e) {
     echo $e->getMessage() . "\n";
-    echo "Just the debug. Uninstalling jxcore extension in pre-uninstall.php: The id is: $id";
 
+
+    // on plesk 12 we had sometimes exception like "The id is not atomic" or something similar
+    // That prevented uninstallation of the extension
     pm_Bootstrap::init();
-    pm_Bootstrap::getDbAdapter()->delete('custom_buttons', array("url like '%jxcore_support%'"));
+    pm_Bootstrap::getDbAdapter()->delete('custom_buttons', array("url like '%jxcore-support%'"));
 
     exit(0);
 }

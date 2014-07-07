@@ -6,28 +6,18 @@ class IndexController extends pm_Controller_Action
     {
         parent::init();
 
-        $initialized = pm_Settings::get("jxcore_initialized") == "true";
-
-        require_once("CustomStatus.php");
-        if(CustomStatus::CheckStatusRender($this)) // Plesk12
+        if(Modules_JxcoreSupport_CustomStatus::CheckStatusRender($this)) // Plesk12
         {
-            $this->_status = new CustomStatus($this->view);
+            $this->_status = new Modules_JxcoreSupport_CustomStatus($this->view);
             $this->view->status = $this->_status;
         }
 
-       // $this->_status->addMessage("info", "aaaa");
-
-
-        // Init title for all actions
         $this->view->pageTitle = 'JXcore Plesk Extension for Node';
 
-        require_once("common.php");
+        $this->common = new Modules_JxcoreSupport_Common($this, $this->_status);
 
-        $this->common = new Common($this, $this->_status);
+        if (Modules_JxcoreSupport_Common::$isAdmin) {
 
-        if (Common::$isAdmin) {
-
-            // Init tabs for all actions
             $this->view->tabs = array(
                 array(
                     'title' => 'JXcore Configuration',
@@ -41,10 +31,6 @@ class IndexController extends pm_Controller_Action
                     'title' => 'NPM Modules',
                     'action' => 'listmodules',
                 ),
-//                array(
-//                    'title' => 'Monitor log',
-//                    'action' => 'log'
-//                ),
                 array(
                     'title' => 'Subscriptions',
                     'action' => 'listsubscriptions'
@@ -62,13 +48,13 @@ class IndexController extends pm_Controller_Action
      */
     private function redirect($onlyAdminIsAllowed = false)
     {
-        if (Common::$firstRun) {
-            $tab = Common::$isAdmin ? 'init' : 'initNonAdmin';
+        if (Modules_JxcoreSupport_Common::$firstRun) {
+            $tab = Modules_JxcoreSupport_Common::$isAdmin ? 'init' : 'initNonAdmin';
             $this->_forward($tab);
             return true;
         }
 
-        if ($onlyAdminIsAllowed && !Common::$isAdmin) {
+        if ($onlyAdminIsAllowed && !Modules_JxcoreSupport_Common::$isAdmin) {
             $this->_forward('listdomains');
             return true;
         }
@@ -81,7 +67,7 @@ class IndexController extends pm_Controller_Action
      */
     public function initnonadminAction()
     {
-        if (Common::$isAdmin) return;
+        if (Modules_JxcoreSupport_Common::$isAdmin) return;
 
         // Init form here
         $form = new pm_Form_Simple();
@@ -111,10 +97,6 @@ class IndexController extends pm_Controller_Action
     {
         if ($this->redirect(true)) return;
 
-//        $log = "empty";
-//        Common::getURL(Common::$urlMonitorLog, $log);
-//        $this->view->log = str_replace("\n", "<br>", $log);
-
         $form = new pm_Form_Simple();
         $sidClearLog = "clear_log";
         $sidLastLinesCount = "last_lines_count";
@@ -125,7 +107,7 @@ class IndexController extends pm_Controller_Action
 
         $form->addElement('simpleText', "size", array(
             'label' => 'Log file',
-            'value' => Common::getSimpleButton($sidClearLog, "Clear log", "clear", Common::iconUrlDelete, null, "margin-left: 0px;"),
+            'value' => Modules_JxcoreSupport_Common::getSimpleButton($sidClearLog, "Clear log", "clear", Modules_JxcoreSupport_Common::iconUrlDelete, null, "margin-left: 0px;"),
             'escape' => false
         ));
 
@@ -155,18 +137,18 @@ class IndexController extends pm_Controller_Action
             $val = $form->getValue($sidLastLinesCount);
 
             if ($actionClearPressed) {
-                Common::callService("delete", "monitorlogs", "Log cleared.", "Problem: ");
+                Modules_JxcoreSupport_Common::callService("delete", "monitorlogs", "Log cleared.", "Problem: ");
             } else {
                 pm_Settings::set($sidLastLinesCount . "monitor", $val);
             }
-            $this->_helper->json(array('redirect' => Common::$urlJXcoreMonitorLog));
+            $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlJXcoreMonitorLog));
         }
 
         $log = "";
-        Common::getURL(Common::$urlMonitorLog, $log);
+        Modules_JxcoreSupport_Common::getURL(Modules_JxcoreSupport_Common::$urlMonitorLog, $log);
         $this->view->log = implode("<br>", array_slice(explode("\n", trim($log)), -$val));
 
-        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
+        $this->view->buttonsDisablingScript = Modules_JxcoreSupport_Common::getButtonsDisablingScript();
         $this->view->form = $form;
     }
 
@@ -189,7 +171,7 @@ class IndexController extends pm_Controller_Action
         if ($this->view->list) {
             $this->view->list->setDataUrl(array('action' => 'listdomains-data'));
         }
-        Common::check();
+        Modules_JxcoreSupport_Common::check();
     }
 
     /**
@@ -201,7 +183,7 @@ class IndexController extends pm_Controller_Action
 
         // Json data from pm_View_List_Simple
         $this->_helper->json($this->view->list->fetchData());
-        Common::check();
+        Modules_JxcoreSupport_Common::check();
     }
 
 
@@ -210,7 +192,7 @@ class IndexController extends pm_Controller_Action
      */
     public function initAction()
     {
-        if (!Common::$isAdmin) {
+        if (!Modules_JxcoreSupport_Common::$isAdmin) {
             $this->_forward("initNonAdmin");
             return;
         };
@@ -230,18 +212,18 @@ class IndexController extends pm_Controller_Action
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
 
             $this->_status->beforeRedirect = true;
-            if (!Common::isJXValid()) {
+            if (!Modules_JxcoreSupport_Common::isJXValid()) {
                 $out = null;
 
                 $ok = $this->download_JXcore($out);
                 $this->_status->addMessage($ok ? 'info' : 'error', $out);
 
-                Common::enableServices();
-                Common::updateAllConfigsIfNeeded();
-                Common::monitorStartStop("start");
+                Modules_JxcoreSupport_Common::enableServices();
+                Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded();
+                Modules_JxcoreSupport_Common::monitorStartStop("start");
             }
 
-            pm_Settings::set(Common::sidFirstRun, "no");
+            pm_Settings::set(Modules_JxcoreSupport_Common::sidFirstRun, "no");
             $this->_helper->json(array('redirect' => pm_Context::getBaseUrl()));
         }
 
@@ -259,15 +241,15 @@ class IndexController extends pm_Controller_Action
         $sidJXcore = 'jx_binary_install_uninstall';
         $req = $this->getRequest();
 
-        $json = Common::getMonitorJSON();
+        $json = Modules_JxcoreSupport_Common::getMonitorJSON();
         $monitorRunning = $json !== null;
 
         // Init form here
         $form = new pm_Form_Simple();
 
-        $jxvalid = Common::isJXValid();
+        $jxvalid = Modules_JxcoreSupport_Common::isJXValid();
 
-        if (Common::$isAdmin) {
+        if (Modules_JxcoreSupport_Common::$isAdmin) {
 
             // JXcore install uninstall
             $form->addElement('hidden', $sidJXcore, array(
@@ -277,30 +259,28 @@ class IndexController extends pm_Controller_Action
             $form->addElement('simpleText', 'jxversion', array(
                 'label' => 'JXcore version',
                 'escape' => false,
-                'value' => Common::getIcon(Common::$jxv, "Installed " . Common::$jxv, 'Not installed')
+                'value' => Modules_JxcoreSupport_Common::getIcon(Modules_JxcoreSupport_Common::$jxv, "Installed " . Modules_JxcoreSupport_Common::$jxv, 'Not installed')
             ));
 
-            if (Common::$jxv) {
+            if (Modules_JxcoreSupport_Common::$jxv) {
                 $form->addElement('simpleText', 'jxpath', array(
                     'label' => 'JXcore path',
                     'escape' => false,
-                    'value' => $jxvalid ? Common::$jxpath : "<span style=\"color: red;\">Could not find JXcore executable file (path = '" . Common::$jxpath . "'). Try reinstalling JXcore.</span>",
+                    'value' => $jxvalid ? Modules_JxcoreSupport_Common::$jxpath : "<span style=\"color: red;\">Could not find JXcore executable file (path = '" . Modules_JxcoreSupport_Common::$jxpath . "'). Try reinstalling JXcore.</span>",
                 ));
             }
 
-            if (Common::$jxv) {
-                $buttons =
-                    Common::getSimpleButton($sidJXcore, 'Reinstall', "install", "/theme/icons/16/plesk/show-all.png", null, "margin-left: 0;");// .
-                    //Common::getSimpleButton($sidJXcore, 'Uninstall', "uninstall", "/theme/icons/16/plesk/delete.png");
+            if (Modules_JxcoreSupport_Common::$jxv) {
+                $buttons = Modules_JxcoreSupport_Common::getSimpleButton($sidJXcore, 'Reinstall', "install", "/theme/icons/16/plesk/show-all.png", null, "margin-left: 0;");
             } else {
-                $buttons = Common::getSimpleButton($sidJXcore, 'Install', "install", "/theme/icons/16/plesk/upload-files.png", null, "margin-left: 0;");
+                $buttons = Modules_JxcoreSupport_Common::getSimpleButton($sidJXcore, 'Install', "install", "/theme/icons/16/plesk/upload-files.png", null, "margin-left: 0;");
             }
 
             $form->addElement('simpleText', 'reinstall', array(
                 'label' => '',
                 'escape' => false,
                 'value' => $buttons,
-                'description' => Common::$jxv ?
+                'description' => Modules_JxcoreSupport_Common::$jxv ?
                         "If you reinstall JXcore, all the running node applications will be restarted after updating JXcore binary." :
                         "JXcore distribution for this platform will be downloaded and installed."
             ));
@@ -308,7 +288,7 @@ class IndexController extends pm_Controller_Action
 
             if ($jxvalid) {
 
-                Common::addHr($form);
+                Modules_JxcoreSupport_Common::addHr($form);
 
                 // monitor start / stop button
                 $form->addElement('hidden', $sidMonitor, array(
@@ -323,7 +303,7 @@ class IndexController extends pm_Controller_Action
 //                    else  if ($cronAction == "stop")
 //                         $btn = Common::getIcon($monitorRunning, "Online", "Offline") . "<div> Monitor is scheduled to be stopped in $ret seconds.</div>";
 //                } else {
-                    $btn = Common::getButtonStartStop($monitorRunning, $sidMonitor, ["Online", "Start"], ["Offline", "Stop"]);
+                    $btn = Modules_JxcoreSupport_Common::getButtonStartStop($monitorRunning, $sidMonitor, ["Online", "Start"], ["Offline", "Stop"]);
 //                }
 
 
@@ -334,45 +314,36 @@ class IndexController extends pm_Controller_Action
                     'description' => $monitorRunning ? "If you stop, all the monitored applications will be terminated!" : "If you start, all the JXcore enabled applications will be launched."
                 ));
 
-//                $form->addElement('checkbox', Common::sidMonitorEnabled, array(
-//                    'label' => "Launch JXcore Monitor at system`s startup.",
-//                    'value' => pm_Settings::get(Common::sidMonitorEnabled),
-//                ));
+                Modules_JxcoreSupport_Common::addHr($form);
 
-                Common::addHr($form);
-
-
-                $form->addElement('text', Common::sidJXcoreMinimumPortNumber, array(
+                $form->addElement('text', Modules_JxcoreSupport_Common::sidJXcoreMinimumPortNumber, array(
                     'label' => 'Minimum app port number',
-                    'value' => Common::$minApplicationPort,
+                    'value' => Modules_JxcoreSupport_Common::$minApplicationPort,
                     'required' => true,
                     'validators' => array(
                         'Int',
-                        array("LessThan", true, array('max' => $req->getParam(Common::sidJXcoreMaximumPortNumber))),
-                        array("Between", true, array('min' => Common::minApplicationPort_default, 'max' => Common::maxApplicationPort_default))
+                        array("LessThan", true, array('max' => $req->getParam(Modules_JxcoreSupport_Common::sidJXcoreMaximumPortNumber))),
+                        array("Between", true, array('min' => Modules_JxcoreSupport_Common::minApplicationPort_default, 'max' => Modules_JxcoreSupport_Common::maxApplicationPort_default))
                     ),
                     'description' => '',
                     'escape' => false
                 ));
 
-                $domainCnt = count(Common::getDomainsIDs());
+                $domainCnt = count(Modules_JxcoreSupport_Common::getDomainsIDs());
                 $validator = new MyValid_PortMax();
-                $validator->newMinimum = $req->getParam(Common::sidJXcoreMinimumPortNumber);
-                $form->addElement('text', Common::sidJXcoreMaximumPortNumber, array(
+                $validator->newMinimum = $req->getParam(Modules_JxcoreSupport_Common::sidJXcoreMinimumPortNumber);
+                $form->addElement('text', Modules_JxcoreSupport_Common::sidJXcoreMaximumPortNumber, array(
                     'label' => 'Maximum app port number',
-                    'value' => Common::$maxApplicationPort,
+                    'value' => Modules_JxcoreSupport_Common::$maxApplicationPort,
                     'required' => true,
                     'validators' => array('Int',
-                        array("GreaterThan", true, array('min' => $req->getParam(Common::sidJXcoreMinimumPortNumber))),
-                        array("Between", true, array('min' => Common::minApplicationPort_default, 'max' => Common::maxApplicationPort_default)),
+                        array("GreaterThan", true, array('min' => $req->getParam(Modules_JxcoreSupport_Common::sidJXcoreMinimumPortNumber))),
+                        array("Between", true, array('min' => Modules_JxcoreSupport_Common::minApplicationPort_default, 'max' => Modules_JxcoreSupport_Common::maxApplicationPort_default)),
                         $validator
                     ),
                     'description' => "The port range should be greater than domain count multiplied by two (HTTP + HTTPS). Right now there are $domainCnt domains, and you need two ports for each of them.",
                     'escape' => false
                 ));
-
-
-//                JXconfig::addConfigToForm($form);
 
                 $form->addElement('simpleText', "restartmayoccur", array(
                     'label' => '',
@@ -394,13 +365,11 @@ class IndexController extends pm_Controller_Action
                 $installAction = in_array($req->getParam($sidJXcore), ["install", "uninstall"]);
 
                 if ($monitorAction) {
-                    Common::monitorStartStop($req->getParam($sidMonitor));
+                    Modules_JxcoreSupport_Common::monitorStartStop($req->getParam($sidMonitor));
                 } else if ($installAction) {
                     $this->JXcoreInstallUninstall($req->getParam($sidJXcore));
                 } else {
-                    $params = [Common::sidJXcoreMinimumPortNumber, Common::sidJXcoreMaximumPortNumber,
-                    ];
-
+                    $params = [Modules_JxcoreSupport_Common::sidJXcoreMinimumPortNumber, Modules_JxcoreSupport_Common::sidJXcoreMaximumPortNumber];
 
                     $portsChanged = false;
                     foreach ($params as $param) {
@@ -408,18 +377,18 @@ class IndexController extends pm_Controller_Action
                         pm_Settings::set($param, $form->getValue($param));
                     }
 
-                    if ($portsChanged) Common::reassignPorts();
-                    Common::updateAllConfigsIfNeeded();
+                    if ($portsChanged) Modules_JxcoreSupport_Common::reassignPorts();
+                    Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded();
 
                     $this->_status->addMessage('info', 'Data was successfully saved.');
                 }
-                $this->_helper->json(array('redirect' => Common::$urlJXcoreConfig));
+                $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlJXcoreConfig));
             }
         }
 
-        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
+        $this->view->buttonsDisablingScript = Modules_JxcoreSupport_Common::getButtonsDisablingScript();
         $this->view->form = $form;
-        Common::check();
+        Modules_JxcoreSupport_Common::check();
     }
 
 
@@ -457,16 +426,16 @@ class IndexController extends pm_Controller_Action
 
             $nameToRemove = trim($this->getRequest()->getParam("remove"));
             if ($nameToRemove) {
-                Common::callService("remove", $nameToRemove, "Module #arg# was successfully removed.", "Cannot remove #arg# module.");
+                Modules_JxcoreSupport_Common::callService("remove", $nameToRemove, "Module #arg# was successfully removed.", "Cannot remove #arg# module.");
             } else
             if ($nameToInstall) {
-                Common::callService("install", $nameToInstall, "Module #arg# was successfully installed.", "Cannot install #arg# module.");
+                Modules_JxcoreSupport_Common::callService("install", $nameToInstall, "Module #arg# was successfully installed.", "Cannot install #arg# module.");
             }
 
-            $this->_helper->json(array('redirect' => Common::$urlJXcoreModules));
+            $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlJXcoreModules));
         }
 
-        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
+        $this->view->buttonsDisablingScript = Modules_JxcoreSupport_Common::getButtonsDisablingScript();
         $this->view->form = $form;
 
         $this->view->list = $this->getModulesList();
@@ -474,23 +443,21 @@ class IndexController extends pm_Controller_Action
             $this->view->list->setDataUrl(array('action' => 'listmodules-data'));
         }
 
-        Common::check();
+        Modules_JxcoreSupport_Common::check();
     }
 
     public function listmodulesDataAction()
     {
         $this->listmodulesAction();
-
-        // Json data from pm_View_List_Simple
         $this->_helper->json($this->view->list->fetchData());
-        Common::check();
+        Modules_JxcoreSupport_Common::check();
     }
 
     private function getModulesList() {
         $list = new pm_View_List_Simple($this->view, $this->_request);
 
         $data = [];
-        $info = Common::callService("modules", "info", null, null, true);
+        $info = Modules_JxcoreSupport_Common::callService("modules", "info", null, null, true);
 
         $modules = explode("||", $info);
         foreach($modules as $str) {
@@ -501,9 +468,7 @@ class IndexController extends pm_Controller_Action
             }
         }
 
-
-        $node_modules = Common::$dirNativeModules . "node_modules/";
-//        $installed_modules = [];
+        $node_modules = Modules_JxcoreSupport_Common::$dirNativeModules . "node_modules/";
         if (file_exists($node_modules)) {
             $d = dir($node_modules);
             while (false !== ($entry = $d->read())) {
@@ -513,14 +478,12 @@ class IndexController extends pm_Controller_Action
                     $desc = isset($modules[$entry . "_description"]) ? $modules[$entry . "_description"] : "Cannot read description";
 
                     $data[] = array(
-                        'column-1' => Common::iconON,
+                        'column-1' => Modules_JxcoreSupport_Common::iconON,
                         'column-2' => $entry,
                         'column-3' => $ver,
                         'column-4' => $desc,
-                        'column-5' => Common::getSimpleButton("remove", "Remove", "$entry", null, null, "margin: 0px;")
+                        'column-5' => Modules_JxcoreSupport_Common::getSimpleButton("remove", "Remove", "$entry", null, null, "margin: 0px;")
                     );
-
-                    //$installed_modules[] = '<div style="width: 120px; display: inline-block">' . Common::getIcon(true, $entry, "") . "</div>" . Common::getSimpleButton("remove", "Remove", "$entry", Common::iconUrlDelete);
                 }
             }
             $d->close();
@@ -551,7 +514,6 @@ class IndexController extends pm_Controller_Action
         );
 
         $list->setColumns($columns);
-        // Take into account listDataAction corresponds to the URL /list-data/
         $list->setDataUrl(array('action' => 'listdomains-data'));
         return $list;
     }
@@ -561,7 +523,7 @@ class IndexController extends pm_Controller_Action
 
     private function _getDomains()
     {
-        if (!Common::$jxv) {
+        if (!Modules_JxcoreSupport_Common::$jxv) {
             $this->_status->addMessage("error", "JXcore is not installed");
             return;
         }
@@ -575,11 +537,11 @@ class IndexController extends pm_Controller_Action
         $clid = $client->getId();
 
         $data = array();
-        $ids = Common::getDomainsIDs();
+        $ids = Modules_JxcoreSupport_Common::getDomainsIDs();
         foreach ($ids as $id) {
-            $domain = Common::getDomain($id);
+            $domain = Modules_JxcoreSupport_Common::getDomain($id);
 
-            if (!Common::$isAdmin && $clid != $domain->row['cl_id']) {
+            if (!Modules_JxcoreSupport_Common::$isAdmin && $clid != $domain->row['cl_id']) {
                 continue;
             }
 
@@ -597,11 +559,11 @@ class IndexController extends pm_Controller_Action
                 'column-1' => $id,
                 'column-2' => url($editUrl, $domain->row['displayName']),
                 'column-3' => url($editUrl, $domain->row['cr_date']),
-                'column-4' => Common::getIcon($status, "Enabled", "Disabled"),
+                'column-4' => Modules_JxcoreSupport_Common::getIcon($status, "Enabled", "Disabled"),
                 'column-5' => $domain->getAppPortStatus(null, false),
                 'column-6' =>  $domain->getAppStatus(),
                 'column-7' => url($editUrl, $domain->sysUser),
-                'column-8' => Common::getSimpleButton("edit", "Manage", null, null, $editUrl),
+                'column-8' => Modules_JxcoreSupport_Common::getSimpleButton("edit", "Manage", null, null, $editUrl),
             );
         }
 
@@ -643,7 +605,6 @@ class IndexController extends pm_Controller_Action
         );
 
         $list->setColumns($columns);
-        // Take into account listDataAction corresponds to the URL /list-data/
         $list->setDataUrl(array('action' => 'listdomains-data'));
 
         return $list;
@@ -662,7 +623,7 @@ class IndexController extends pm_Controller_Action
         if ($this->view->list) {
             $this->view->list->setDataUrl(array('action' => 'listsubscriptions-data'));
         }
-        Common::check();
+        Modules_JxcoreSupport_Common::check();
     }
 
     /**
@@ -674,13 +635,13 @@ class IndexController extends pm_Controller_Action
 
         // Json data from pm_View_List_Simple
         $this->_helper->json($this->view->list->fetchData());
-        Common::check();
+        Modules_JxcoreSupport_Common::check();
     }
 
 
     private function getSubscriptions()
     {
-        if (!Common::$jxv) {
+        if (!Modules_JxcoreSupport_Common::$jxv) {
             $this->_status->addMessage("error", "JXcore is not installed");
             return;
         }
@@ -694,10 +655,6 @@ class IndexController extends pm_Controller_Action
         $clid = $client->getId();
 
         $data = array();
-        $ids = Common::getDomainsIDs();
-        $cnt = 1;
-
-        $json = Common::getMonitorJSON();
 
         // fetching domain list
         $dbAdapter = pm_Bootstrap::getDbAdapter();
@@ -706,16 +663,11 @@ class IndexController extends pm_Controller_Action
 
         while ($row = $statement->fetch()) {
             $id = intval($row['id']);
-            $domainId = intval($row['object_id']);
-            $domain = Common::getDomain($domainId);
             $sub = SubscriptionInfo::getSubscription($id);
 
-            if (!Common::$isAdmin && $clid != $domain->row['cl_id']) {
+            if (!Modules_JxcoreSupport_Common::$isAdmin && $clid != $sub->mainDomain->row['cl_id']) {
                 continue;
             }
-
-            $status = $domain->JXcoreSupportEnabled();
-            if ($status != 1) $status = false; else $status = true;
 
             $baseUrl = pm_Context::getBaseUrl() . 'index.php/subscription/';
             $editUrl = $baseUrl . 'config/id/' . $id;
@@ -724,19 +676,13 @@ class IndexController extends pm_Controller_Action
             $domains_str = "";
             foreach($domains as $d) {
                 $domains_str .=  $d->name . "<br>";
-//                $domains_str .= $d- $d->getAppStatus() . "<br>";
             }
-
 
             $data[] = array(
                 'column-1' => $id,
-                'column-2' => url($editUrl, $domain->row['displayName']),
+                'column-2' => url($editUrl, $sub->mainDomain->row['displayName']),
                 'column-3' => $domains_str,
-//                'column-4' => Common::getIcon($status, "Enabled", "Disabled"),
-            //    'column-5' => $domain->getAppPortStatus(null, false),
-            //    'column-6' =>  $domain->getAppStatus(),
-//                'column-7' => url($editUrl, $domain->sysUser),
-                'column-8' => Common::getSimpleButton("edit", "Manage", null, null, $editUrl),
+                'column-8' => Modules_JxcoreSupport_Common::getSimpleButton("edit", "Manage", null, null, $editUrl),
             );
         }
 
@@ -762,7 +708,6 @@ class IndexController extends pm_Controller_Action
         );
 
         $list->setColumns($columns);
-        // Take into account listDataAction corresponds to the URL /list-data/
         $list->setDataUrl(array('action' => 'listdomains-data'));
 
         return $list;
@@ -796,10 +741,8 @@ class IndexController extends pm_Controller_Action
                         'Debian' => 'deb'
                     );
 
-//                    $str = $procv . "@@@@@";
                     foreach ($distros as $key => $val) {
                         $pos = stripos($procv, $key);
-//                        $str .= "$key -> $val : $pos @ ";
                         if ($pos !== false) {
                             $platform = $val;
                             break;
@@ -836,8 +779,8 @@ class IndexController extends pm_Controller_Action
                         return false;
                     } else {
 //                        exec("rm -rf $unzippedDir");
-                        Common::rmdir($unzippedDir);
-                        Common::rmdir(Common::$dirSubscriptionConfigs);
+                        Modules_JxcoreSupport_Common::rmdir($unzippedDir);
+                        Modules_JxcoreSupport_Common::rmdir(Modules_JxcoreSupport_Common::$dirSubscriptionConfigs);
                         //unlink($unzippedJX);
 
                         $zipObj = new ZipArchive();
@@ -861,14 +804,12 @@ class IndexController extends pm_Controller_Action
 
                         if (file_exists($unzippedJX)) {
                             $jxv = shell_exec("$unzippedJX -jxv");
-                            Common::setJXdata($jxv, $unzippedJX);
-                            Common::updateCron();
+                            Modules_JxcoreSupport_Common::setJXdata($jxv, $unzippedJX);
+                            Modules_JxcoreSupport_Common::updateCron();
 
                             $output = "JXcore {$basename} version {$jxv} successfully installed.";
                             return true;
                         }
-
-
                     }
                 }
             }
@@ -886,8 +827,8 @@ class IndexController extends pm_Controller_Action
     private function JXcoreInstallUninstall($req)
     {
         // shutting down monitor if it's online
-        if (in_array($req, ['install', 'uninstall'], true) && Common::isJXValid()) {
-            Common::monitorStartStop('stop');
+        if (in_array($req, ['install', 'uninstall'], true) && Modules_JxcoreSupport_Common::isJXValid()) {
+            Modules_JxcoreSupport_Common::monitorStartStop('stop');
         }
 
         if ($req === 'install') {
@@ -895,16 +836,16 @@ class IndexController extends pm_Controller_Action
             $ok = $this->download_JXcore($out);
             $this->_status->addMessage($ok ? 'info' : 'error', $out);
 
-            Common::monitorStartStop('start');
+            Modules_JxcoreSupport_Common::monitorStartStop('start');
         } else
-            if ($req === 'uninstall' && Common::isJXValid()) {
+            if ($req === 'uninstall' && Modules_JxcoreSupport_Common::isJXValid()) {
 
-                $dir = dirname(Common::$jxpath) . "/";
+                $dir = dirname(Modules_JxcoreSupport_Common::$jxpath) . "/";
                 // deleting subscriptions folder, because there are copies of jx binaries there
-                Common::rmdir(Common::$dirSubscriptionConfigs);
+                Modules_JxcoreSupport_Common::rmdir(Modules_JxcoreSupport_Common::$dirSubscriptionConfigs);
                 // deleting jxcore folder
-                $ok = Common::rmdir($dir);
-                Common::setJXdata(null, null);
+                $ok = Modules_JxcoreSupport_Common::rmdir($dir);
+                Modules_JxcoreSupport_Common::setJXdata(null, null);
 
                 if ($ok) {
                     $this->_status->addMessage('info', "JXcore succesfully uninstalled.");
@@ -950,13 +891,9 @@ class MyValid_PortMax extends Zend_Validate_Abstract
 
     public function isValid($value)
     {
-//        $this->minimum = Common::$minApplicationPort;
-//        $this->maximum = Common::$maxApplicationPort;
-
         $this->_setValue($value);
 
-
-        $this->domainCount = count(Common::getDomainsIDs()) * 2;
+        $this->domainCount = count(Modules_JxcoreSupport_Common::getDomainsIDs()) * 2;
 
         if ($value - $this->newMinimum + 1 < $this->domainCount) {
             $this->_error(self::MSG_TOOLITTLE);
