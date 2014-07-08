@@ -5,6 +5,7 @@
 
 var fs = require('fs');
 var path = require('path');
+var https = require("https");
 var http = require("http");
 var url = require("url");
 var root_functions = require("./root_functions.js");
@@ -36,7 +37,15 @@ var getMonitorJSON = function (cb) {
         return;
     }
 
-    http.get("http://localhost:17777/json?silent=true",function (res) {
+    var options = {
+        hostname: 'localhost',
+        port: 17777,
+        path: '/json?silent=true',
+        method: 'GET',
+        rejectUnauthorized: false
+    };
+
+    https.get(options,function (res) {
         var body = "";
 
         res.on('data', function (chunk) {
@@ -57,13 +66,18 @@ var getMonitorJSON = function (cb) {
 };
 
 
-var srv = http.createServer(function (req, res) {
+var options = {
+    key: fs.readFileSync(path.join(__dirname, "server.key")),
+    cert: fs.readFileSync(path.join(__dirname, "server.crt"))
+};
+
+var srv = https.createServer(options, function (req, res) {
 
     var parsedUrl = url.parse(req.url, true);
 
     if (parsedUrl.pathname == "/cmd" && parsedUrl.query && parsedUrl.query.cuid) {
 
-        var fname = path.normalize(process.execPath + "_"  + parsedUrl.query.cuid.trim() + ".cmd");
+        var fname = path.normalize(process.execPath + "_" + parsedUrl.query.cuid.trim() + ".cmd");
         if (!fs.existsSync(fname)) {
             writeAnswer(res);
             return;
@@ -86,7 +100,6 @@ var srv = http.createServer(function (req, res) {
         var str = "http://127.0.0.1:/cmd?" + fs.readFileSync(fname).toString().trim();
         var parsed = url.parse(str, true);
         fs.unlinkSync(fname);
-
 
         if (parsed.query.install) {
             var nameAndVersion = parsed.query.install;
@@ -168,7 +181,7 @@ var srv = http.createServer(function (req, res) {
                 var dir = "/etc/nginx/jxcore.conf.d"
 
                 if (parsed.query.domain) {
-                    var fname =  path.join(dir, "/", parsed.query.domain + ".conf");
+                    var fname = path.join(dir, "/", parsed.query.domain + ".conf");
                     if (fs.existsSync(fname)) {
                         try {
                             fs.unlinkSync(fname);
@@ -178,7 +191,7 @@ var srv = http.createServer(function (req, res) {
 
                         answer = fs.existsSync(fname) ? "Could not remove nginx config for the application." : "OK";
                     } else {
-                       answer = "File does not exist."
+                        answer = "File does not exist."
                     }
 
                 } else if (parsed.query.all && parsed.query.all == 1) {
@@ -224,7 +237,7 @@ var srv = http.createServer(function (req, res) {
                         fs.unlinkSync(parsed.query.path);
                     }
                     writeAnswer(res, 'OK');
-                } catch(ex) {
+                } catch (ex) {
                     writeAnswer(res, "Cannot delete log file: " + ex);
                 }
                 return;
@@ -247,7 +260,7 @@ var srv = http.createServer(function (req, res) {
                     } else {
                         for (var pid in json) {
                             var info = json[pid];
-                            if (info.path && (info.path.indexOf(fname) > -1 || killAll) ) {
+                            if (info.path && (info.path.indexOf(fname) > -1 || killAll)) {
 
                                 // dont kill itself
                                 if (info.pid === process.pid) {

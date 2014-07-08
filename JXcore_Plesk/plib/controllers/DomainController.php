@@ -1,5 +1,8 @@
 <?php
 
+/* Copyright Nubisa, Inc. 2014. All Rights Reserved */
+
+
 class DomainController extends pm_Controller_Action
 {
     private $domain = null;

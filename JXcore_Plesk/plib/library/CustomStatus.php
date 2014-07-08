@@ -1,4 +1,7 @@
 <?php
+
+/* Copyright Nubisa, Inc. 2014. All Rights Reserved */
+
 // !!! We needed to do this hack for Plesk 12 since the status messages weren't showing on extension
 
 class Modules_JxcoreSupport_CustomStatus

@@ -1,18 +1,8 @@
 <?php
 
+/* Copyright Nubisa, Inc. 2014. All Rights Reserved */
+
 /*
- * todo:
- *
- * on uninstall:
- *      cleaning .htaccess for each domain
- *
- * known issues:
- *      - when extension is uninstalled, and we upload some files to folders, where extension generally resides:
- *      1. /usr/local/psa/var/modules/jxcore-support/
- *      2. /usr/local/psa/admin/plib/modules/jxcore-support/
- *      then installimng an extension may fail with:
- *      Error: Unable to install the extension: filemng failed: filemng: Error occurred during /bin/cp command.
- *
  *
  * useful commands:
  *      - fix plesk config:
@@ -20,19 +10,14 @@
  *      - reload nginx config:
  *          /etc/init.d/nginx reload
  *
- * sudo date --set "15 May 2014 11:30:00"
- *
- *
- * To check:
- *  - is maxMem and maxCPU value - really disabling the restriction?
- */
+*/
 
 
 class Modules_JxcoreSupport_Common
 {
     public static $urlMonitor = "";
     public static $urlMonitorLog = "";
-    public static $urlService = "http://localhost:18999/";
+    public static $urlService = "";
 
     public static $urlJXcoreConfig = "";
     public static $urlJXcoreDomains = "";
@@ -115,6 +100,8 @@ class Modules_JxcoreSupport_Common
     public static $needToReloadNginx = false;
     private static $nginxReloaded = false;
 
+    public static $restartFlag = false;
+
     function Modules_JxcoreSupport_Common($controller, $status = null)
     {
         self::$controller = $controller;
@@ -169,8 +156,9 @@ class Modules_JxcoreSupport_Common
         $varDir = pm_Context::getVarDir();
 
         self::$urlJXcoreDomains = $baseUrl . "index.php/index/listdomains";
-        self::$urlMonitor = "http://localhost:17777/json?silent=true";
-        self::$urlMonitorLog = "http://localhost:17777/logs";
+        self::$urlMonitor = "https://localhost:17777/json?silent=true";
+        self::$urlMonitorLog = "https://localhost:17777/logs";
+        self::$urlService = "https://localhost:18999/";
         self::$urlJXcoreConfig = $baseUrl . "index.php/index/jxcore";
         self::$urlJXcoreModules = $baseUrl . "index.php/index/listmodules";
         self::$urlJXcoreSubscriptions = $baseUrl . "index.php/index/listsubscriptions";
@@ -212,6 +200,8 @@ class Modules_JxcoreSupport_Common
             self::sidDomainJXcoreAppAllowSysExec => array("defaultValue" => 1),
             self::sidDomainJXcoreAppAllowLocalNativeModules => array("defaultValue" => 1),
         );
+
+        //self::saveConfig();
     }
 
 
@@ -256,7 +246,14 @@ class Modules_JxcoreSupport_Common
         return self::$jxv && self::$jxpath && file_exists(self::$jxpath);
     }
 
-    public static function updateAllConfigsIfNeeded() {
+    /**
+     * @param null $restartFlag.
+     *      "nowait" - restarts apps if needed, but does not wait fo them.
+     *      "norestart" - does not restart applications
+     */
+    public static function updateAllConfigsIfNeeded($restartFlag = null) {
+
+        self::$restartFlag = $restartFlag;
 
         Modules_JxcoreSupport_Common::updateBatchAndCron();
 
@@ -294,11 +291,16 @@ class Modules_JxcoreSupport_Common
         if (file_exists($path)) {
             $dir = dirname($path) . "/";
 
+
             $cfg = '{
                        "monitor" :
                        {
                            "log_path" : "' . $dir . 'jx_monitor_[WEEKOFYEAR]_[YEAR].log",
-                           "users": [ "psaadm" ]
+                           "users": [ "psaadm" ],
+                           "https" : {
+                                "httpsKeyLocation" : "' . pm_Context::getVarDir()  .'server.key",
+                                "httpsCertLocation" : "' . pm_Context::getVarDir()  .'server.crt"
+                            }
                        },
                        "globalModulePath" : "' . self::$dirNativeModules . '",
                        "globalApplicationConfigPath" : "' . self::$dirAppsConfigs . '",
@@ -332,12 +334,15 @@ class Modules_JxcoreSupport_Common
      */
     public static function rmdir($dir) {
         if (is_dir($dir)) {
-            $files = array_diff(scandir($dir), array('.', '..'));
+            @exec("rm -rf $dir");
 
-            foreach ($files as $file) {
-                @unlink("$dir/$file");
-            }
-            return @rmdir($dir);
+            // was not working recursively
+//            $files = array_diff(scandir($dir), array('.', '..'));
+//
+//            foreach ($files as $file) {
+//                @unlink("$dir/$file");
+//            }
+//            return @rmdir($dir);
         } else {
             return true;
         }
@@ -383,6 +388,9 @@ class Modules_JxcoreSupport_Common
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         $data = curl_exec($ch);
         curl_close($ch);
 
@@ -503,7 +511,6 @@ class Modules_JxcoreSupport_Common
 
         if ($monitorEnabled) {
             $commands = [
-                // enabling proxy
 
                 'if [ -d /etc/nginx/conf.d ] && [ ! -e /etc/nginx/conf.d/jxcore.conf ]; then',
                 'mkdir /etc/nginx/jxcore.conf.d',
@@ -799,7 +806,8 @@ class Modules_JxcoreSupport_Common
     }
 
     private static function enableHttpProxy() {
-        //return;
+        // disabled
+        return;
 
         $cmd1 = "/usr/local/psa/admin/bin/httpd_modules_ctl -s";
         $cmd2 = "/usr/local/psa/admin/bin/httpd_modules_ctl -e proxy_http";
@@ -894,11 +902,13 @@ class Modules_JxcoreSupport_Common
      */
     public static function callService($sid, $arg, $msgOK = null, $msgErr = null, $return = null) {
 
+        // saving the command to the file (as psaadm)
         $cmd = "{$sid}={$arg}";
         $uid = uniqid();
         $fname = Modules_JxcoreSupport_Common::$jxpath . "_{$uid}.cmd";
         file_put_contents($fname, $cmd);
 
+        // calling te service with file uid
         $url = Modules_JxcoreSupport_Common::$urlService . "cmd?cuid=$uid";
 
         $ret = Modules_JxcoreSupport_Common::getURL($url, $out);
@@ -1125,15 +1135,14 @@ class DomainInfo
 
         $running =  $json !== null && $path !== false && strpos($json, $path) !== false;
 
-        if ($wait) {
-            sleep(2);
-            for($a=1; $a<10; $a++) {
+        if ($wait && Modules_JxcoreSupport_Common::$restartFlag !== "nowait") {
+            sleep(1);
+            for($a=1; $a<5; $a++) {
                 Modules_JxcoreSupport_Common::clearMonitorJSON();
-                $running = $this->isAppRunning(null);
+                $running = $this->isAppRunning();
                 if ($running) break;
                 sleep(1);
             }
-
         }
         return $running;
     }
@@ -1403,6 +1412,7 @@ class DomainInfo
                     $this->startApp();
                 }
             } else {
+                // removing nginx conf for the domain
                 Modules_JxcoreSupport_Common::callService("nginx", "remove&domain=" . $this->name, null, null);
                 if ($running) {
                     $this->stopApp();
@@ -1471,6 +1481,9 @@ class DomainInfo
 
     private function updatehtaccess()
     {
+        //disabled
+        return;
+
         $mgr = $this->fileManager;
 
         $basename = ".htaccess";
@@ -1519,6 +1532,9 @@ class DomainInfo
     }
 
     private function startApp() {
+
+        if (Modules_JxcoreSupport_Common::$restartFlag === "norestart") return;
+
         $json = Modules_JxcoreSupport_Common::getMonitorJSON();
         $errMsg = "Cannot start the application {$this->name}:";
 
@@ -1537,9 +1553,11 @@ class DomainInfo
             @exec($cmd, $out, $ret);
             // waiting for the app to be restarted by monitor
             // cannot rely on exitcode, so checking the monitor
-            Modules_JxcoreSupport_Common::clearMonitorJSON();
-            $appRunning = $this->isAppRunning(true);
-            StatusMessage::infoOrError(!$appRunning, "The application {$this->name} successfully started.", "The application {$this->name} could not be started.");
+            if (Modules_JxcoreSupport_Common::$restartFlag !== "nowait") {
+                Modules_JxcoreSupport_Common::clearMonitorJSON();
+                $appRunning = $this->isAppRunning(true);
+                StatusMessage::infoOrError(!$appRunning, "The application {$this->name} successfully started.", "The application {$this->name} could not be started.");
+            }
 
             $this->configChanged = false;
         }
@@ -1547,7 +1565,7 @@ class DomainInfo
 
     private function stopApp() {
 
-        if (!$this->isAppRunning()) return;
+        if (!$this->isAppRunning() || Modules_JxcoreSupport_Common::$restartFlag === "norestart") return;
 
 //        $nginexconf = "/etc/nginx/jxcore.conf.d/" . $this->name . ".conf";
 //        if (@file_exists($nginexconf)) {
@@ -1559,13 +1577,18 @@ class DomainInfo
         $cmd = Modules_JxcoreSupport_Common::$jxpath . " monitor kill {$this->getSpawnerPath()} 2>&1";
         @exec($cmd, $out, $ret);
 
-        // cannot rely on exitcode, so checking the monitor
-        Modules_JxcoreSupport_Common::clearMonitorJSON();
-        StatusMessage::infoOrError($this->isAppRunning(), "The application {$this->name} successfully stopped.", "Cannot stop the application. ". join("\n", $out) . ". Exit code: $ret");
-        $this->configChanged = false;
+        if (Modules_JxcoreSupport_Common::$restartFlag !== "nowait") {
+            // cannot rely on exitcode, so checking the monitor
+            Modules_JxcoreSupport_Common::clearMonitorJSON();
+            StatusMessage::infoOrError($this->isAppRunning(), "The application {$this->name} successfully stopped.", "Cannot stop the application. ". join("\n", $out) . ". Exit code: $ret");
+        }
+           $this->configChanged = false;
     }
 
     private function restartApp() {
+
+        if (Modules_JxcoreSupport_Common::$restartFlag === "norestart") return;
+
         if (!$this->isAppRunning()) {
             $this->startApp();
         } else {
@@ -1575,10 +1598,12 @@ class DomainInfo
             } else {
                 // faster by killing teh process and letting the monitor to respawn
                 $out = Modules_JxcoreSupport_Common::callService("kill", $this->id, null, null, true);
-//            StatusMessage::addDebug($out);
-                Modules_JxcoreSupport_Common::clearMonitorJSON();
-                StatusMessage::infoOrError(!$this->isAppRunning(true), "The application {$this->name} was successfully restarted.", "Could not restart the application {$this->name}. $out");
-            }
+
+                if (Modules_JxcoreSupport_Common::$restartFlag !== "nowait") {
+                    Modules_JxcoreSupport_Common::clearMonitorJSON();
+                    StatusMessage::infoOrError(!$this->isAppRunning(true), "The application {$this->name} was successfully restarted.", "Could not restart the application {$this->name}. $out");
+                }
+              }
             $this->configChanged = false;
         }
     }
@@ -1876,7 +1901,11 @@ class SubscriptionInfo {
                        "monitor" :
                        {
                            "log_path" : "' . $this->jxdir . 'jx_monitor_[WEEKOFYEAR]_[YEAR].log",
-                           "users": [ "psaadm" ]
+                           "users": [ "psaadm" ],
+                            "https" : {
+                                "httpsKeyLocation" : "' . pm_Context::getVarDir()  .'server.key",
+                                "httpsCertLocation" : "' . pm_Context::getVarDir()  .'server.crt"
+                            }
                        },
                        "globalModulePath" : "' . Modules_JxcoreSupport_Common::$dirNativeModules . '",
                        "globalApplicationConfigPath" : "' . Modules_JxcoreSupport_Common::$dirAppsConfigs . '",

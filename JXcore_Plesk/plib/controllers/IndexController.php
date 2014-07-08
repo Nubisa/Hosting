@@ -1,5 +1,7 @@
 <?php
 
+/* Copyright Nubisa, Inc. 2014. All Rights Reserved */
+
 class IndexController extends pm_Controller_Action
 {
     public function init()
@@ -378,7 +380,7 @@ class IndexController extends pm_Controller_Action
                     }
 
                     if ($portsChanged) Modules_JxcoreSupport_Common::reassignPorts();
-                    Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded();
+                    Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded("nowait");
 
                     $this->_status->addMessage('info', 'Data was successfully saved.');
                 }
@@ -845,7 +847,7 @@ class IndexController extends pm_Controller_Action
             $out = null;
             $ok = $this->download_JXcore($out);
             $this->_status->addMessage($ok ? 'info' : 'error', $out);
-
+            Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded("norestart");
             Modules_JxcoreSupport_Common::monitorStartStop('start');
         } else
             if ($req === 'uninstall' && Modules_JxcoreSupport_Common::isJXValid()) {
