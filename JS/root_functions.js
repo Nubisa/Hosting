@@ -76,3 +76,18 @@ exports.rmdirSync = function (fullDir) {
 
     return !fs.existsSync(fullDir);
 };
+
+
+exports.getUID = function(username) {
+    if (process.platform === "win32") {
+        return null;
+    }
+
+    var ret = jxcore.utils.cmdSync("id -g " + username);
+    var uid = parseInt(ret.out);
+    if (isNaN(uid)) {
+        return null;
+    } else {
+        return uid;
+    }
+};

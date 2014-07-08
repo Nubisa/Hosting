@@ -46,6 +46,11 @@ class SubscriptionController extends pm_Controller_Action
 
     public function configAction()
     {
+        if (!$this->subscription) {
+            $this->view->form = "Invalid subscription ID";
+            return;
+        }
+
         $json = Modules_JxcoreSupport_Common::getMonitorJSON();
         $monitorRunning = $json !== null;
 

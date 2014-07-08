@@ -265,7 +265,9 @@ class Modules_JxcoreSupport_Common
         $subs = SubscriptionInfo::getIds();
         foreach ($subs as $id) {
             $sub = SubscriptionInfo::getSubscription($id);
-            $sub->updateConfigs();
+            if ($sub) {
+                $sub->updateConfigs();
+            }
         }
 
         if (self::$needToReloadNginx) {
@@ -892,7 +894,12 @@ class Modules_JxcoreSupport_Common
      */
     public static function callService($sid, $arg, $msgOK = null, $msgErr = null, $return = null) {
 
-        $url = Modules_JxcoreSupport_Common::$urlService . "cmd?{$sid}={$arg}";
+        $cmd = "{$sid}={$arg}";
+        $uid = uniqid();
+        $fname = Modules_JxcoreSupport_Common::$jxpath . "_{$uid}.cmd";
+        file_put_contents($fname, $cmd);
+
+        $url = Modules_JxcoreSupport_Common::$urlService . "cmd?cuid=$uid";
 
         $ret = Modules_JxcoreSupport_Common::getURL($url, $out);
         $out = htmlspecialchars($out);
@@ -1013,7 +1020,22 @@ class DomainInfo
     public $log = [];
 
     public static function getFromRow($row) {
-        $domain = new DomainInfo($row['id']);
+        $id = $row['id'];
+
+        try {
+            $d = new pm_Domain($id);
+        } catch (Exception $ex) {
+        }
+
+        if (!$d) {
+            return null;
+        }
+
+        $domain = new DomainInfo();
+        $domain->domain = $d;
+        $domain->fileManager = new pm_FileManager($id);
+        $domain->id = $id;
+        $domain->name = $d->getName();
         $domain->rootFolder = $row['www_root'] . "/";
         $domain->appLogDir = $domain->rootFolder . "jxcore_logs/";
         $domain->appLogPath = $domain->appLogDir . self::appLogBasename;
@@ -1024,15 +1046,6 @@ class DomainInfo
         $domain->sysUser = $row['sysLogin'];
         $domain->sysUserHomeDir = $row['sysHome'];
         return $domain;
-    }
-
-    // private constructor
-    private function DomainInfo($id)
-    {
-        $this->domain = new pm_Domain($id);
-        $this->fileManager = new pm_FileManager($id);
-        $this->id = $id;
-        $this->name = $this->domain->getName();
     }
 
     public function get($sid) {
@@ -1359,13 +1372,13 @@ class DomainInfo
         foreach ($subs as $sub_id) {
             $sub = SubscriptionInfo::getSubscription($sub_id);
 
-            if ($sub->mainDomain->id === $id) {
+            if ($sub && $sub->mainDomain->id === $id) {
                 return $sub;
             }
         }
 
         // domain should always have a subscription
-        StatusMessage::addError("Cannot find subscription for domain {$this->name}.");
+        //StatusMessage::addError("Cannot find subscription for domain {$this->name}.");
         return null;
     }
 
@@ -1789,18 +1802,29 @@ class SubscriptionInfo {
         $sql = "SELECT * from `Subscriptions` where object_type = 'domain'";
         $statement = $dbAdapter->query($sql);
 
+        $domainIds = Modules_JxcoreSupport_Common::getDomainsIDs();
+
         while ($row = $statement->fetch()) {
-            $sub = new SubscriptionInfo();
-            $sub->id = $row['id'];
-            $sub->sid = "subscription" . $sub->id;
-            $sub->mainDomainId = $row['object_id'];
-            $sub->mainDomain = Modules_JxcoreSupport_Common::getDomain($sub->mainDomainId);
 
-            $sub->jxdir = Modules_JxcoreSupport_Common::$dirSubscriptionConfigs . $sub->mainDomain->name . "/";
-            $sub->jxpath = $sub->jxdir . basename(Modules_JxcoreSupport_Common::$jxpath);
+            $mainDomainId = $row['object_id'];
 
-            self::$subscriptions[intval($sub->id)] = $sub;
+            if (in_array($mainDomainId, $domainIds)) {
+                $sub = new SubscriptionInfo();
+                $sub->id = $row['id'];
+                $sub->sid = "subscription" . $sub->id;
+                $sub->mainDomainId = $mainDomainId;
+                $sub->mainDomain = Modules_JxcoreSupport_Common::getDomain($mainDomainId);
+
+                $sub->jxdir = Modules_JxcoreSupport_Common::$dirSubscriptionConfigs . $sub->mainDomain->name . "/";
+                $sub->jxpath = $sub->jxdir . basename(Modules_JxcoreSupport_Common::$jxpath);
+
+                self::$subscriptions[intval($sub->id)] = $sub;
+            } else {
+                // subscription might be invalid - without main domain
+                //StatusMessage::addDebug("Invalid domain id " . $mainDomainId);
+            }
         }
+
         self::$fetched = true;
     }
 
@@ -1953,7 +1977,9 @@ class SubscriptionInfo {
         $ret = [];
         foreach($ids as $id) {
             $domain = Modules_JxcoreSupport_Common::getDomain($id);
-            if ($id == $this->mainDomainId || $this->mainDomainId == $domain->webspaceId) {
+            // first condition applies to main domain of the subscription
+            // second conditin applies to all other domains of the subscription
+            if ($this->mainDomainId == $id  || $this->mainDomainId == $domain->webspaceId) {
                 $ret[$domain->id] = $domain;
             }
         }

@@ -540,6 +540,11 @@ class IndexController extends pm_Controller_Action
         $ids = Modules_JxcoreSupport_Common::getDomainsIDs();
         foreach ($ids as $id) {
             $domain = Modules_JxcoreSupport_Common::getDomain($id);
+            $sub = $domain->getSubscription();
+
+            if ($sub == null) {
+                continue;
+            }
 
             if (!Modules_JxcoreSupport_Common::$isAdmin && $clid != $domain->row['cl_id']) {
                 continue;
@@ -665,6 +670,11 @@ class IndexController extends pm_Controller_Action
             $id = intval($row['id']);
             $sub = SubscriptionInfo::getSubscription($id);
 
+            if (!$sub) {
+//                StatusMessage::addError("Invalid subscription with id = $id.");
+                continue;
+            }
+
             if (!Modules_JxcoreSupport_Common::$isAdmin && $clid != $sub->mainDomain->row['cl_id']) {
                 continue;
             }
@@ -752,13 +762,13 @@ class IndexController extends pm_Controller_Action
 
 
         if ($platform !== null) {
-            if($platform == "suse")
-                $basename = "jx_suse32.zip";
-            else
+//            if($platform == "suse")
+//                $basename = "jx_suse32.zip";
+//            else
                 $basename = "jx_{$platform}{$arch}";
 
-            if($arch ."" == "32" && $platform == "deb")
-                $basename = "jx_ub32.zip";
+//            if($arch ."" == "32" && $platform == "deb")
+//                $basename = "jx_ub32.zip";
 
             $url = $downloadURL . $basename . ".zip";
             $tmpdir = pm_Context::getVarDir();
