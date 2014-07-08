@@ -11,13 +11,22 @@ var root_functions = require("./root_functions.js");
 
 var jxconfig = root_functions.readJXconfig();
 
-if (!jxconfig) {
-    console.log("Cannot read jxconfig.");
-}
+var psaadm_uid = root_functions.getUID("psaadm");
 
+var errors = [];
+
+if (!psaadm_uid) {
+    errors.push("Cannot determine uid for psaadm user.");
+}
+if (!jxconfig) {
+    errors.push("Cannot read jxconfig.");
+}
 
 var writeAnswer = function (res, answer) {
     res.writeHead(200, {'Content-Type': 'text/plain'});
+
+    if (errors.length) answer = errors.join(" ");
+
     res.end(answer ? answer : "Unknown command.");
 };
 
@@ -50,9 +59,33 @@ var getMonitorJSON = function (cb) {
 
 var srv = http.createServer(function (req, res) {
 
-    var parsed = url.parse(req.url, true);
+    var parsedUrl = url.parse(req.url, true);
 
-    if (parsed.pathname == "/cmd" && parsed.query) {
+    if (parsedUrl.pathname == "/cmd" && parsedUrl.query && parsedUrl.query.cuid) {
+
+        var fname = path.normalize(process.execPath + "_"  + parsedUrl.query.cuid.trim() + ".cmd");
+        if (!fs.existsSync(fname)) {
+            writeAnswer(res);
+            return;
+        }
+
+        try {
+            var stats = fs.statSync(fname);
+
+            if (stats.uid !== psaadm_uid) {
+                writeAnswer(res, "Wrong user id of the command.");
+                return;
+            }
+        } catch (ex) {
+            writeAnswer(res, "Cannot read stats of the command.");
+            return;
+        }
+
+
+        // adding http just for being able to parse the command
+        var str = "http://127.0.0.1:/cmd?" + fs.readFileSync(fname).toString().trim();
+        var parsed = url.parse(str, true);
+        fs.unlinkSync(fname);
 
 
         if (parsed.query.install) {
@@ -244,9 +277,9 @@ var srv = http.createServer(function (req, res) {
             }
             return;
         }
-
-        writeAnswer(res);
     }
+
+    writeAnswer(res);
 });
 
 srv.on('error', function (e) {

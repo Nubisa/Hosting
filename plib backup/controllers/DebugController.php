@@ -7,19 +7,17 @@ class DebugController extends pm_Controller_Action
     {
         parent::init();
 
-        require_once("CustomStatus.php");
-        if(CustomStatus::CheckStatusRender($this)) // Plesk12
-        {
-            $this->_status = new CustomStatus($this->view);
-            $this->view->status = new CustomStatus($this->view);
-        }
+//        if(Modules_JxcoreSupport_CustomStatus::CheckStatusRender($this)) // Plesk12
+//        {
+//            $this->_status = new Modules_JxcoreSupport_CustomStatus($this->view);
+//            $this->view->status = new Modules_JxcoreSupport_CustomStatus($this->view);
+//        }
 
         $this->view->pageTitle = 'JXcore Plesk Extension for Node';
 
-        require_once("common.php");
-        $this->common = new Common($this, $this->_status);
+        $this->common = new Modules_JxcoreSupport_Common($this, $this->_status);
 
-        if (Common::$isAdmin) {
+        if (Modules_JxcoreSupport_Common::$isAdmin) {
 
             // Init tabs for all actions
             $this->view->tabs = array();
@@ -68,18 +66,18 @@ class DebugController extends pm_Controller_Action
 
 
         // var contents
-        Common::addHR($form);
+        Modules_JxcoreSupport_Common::addHR($form);
         $this->addText($form, "pm_Context::getVarDir()", pm_Context::getVarDir());
         $this->addText($form, "current date", date("Y-m-d H:i:s"));
 
 
-        Common::addHR($form);
+        Modules_JxcoreSupport_Common::addHR($form);
 
 
-        $ids = Common::getDomainsIDs();
+        $ids = Modules_JxcoreSupport_Common::getDomainsIDs();
         $log = [];
         foreach ($ids as $id) {
-            $domain = Common::getDomain($id);
+            $domain = Modules_JxcoreSupport_Common::getDomain($id);
             $sub = $domain->getSubscription();
 
             $log[] = "domain: {$domain->name}, sub: {$sub->mainDomain->name}";
@@ -91,9 +89,9 @@ class DebugController extends pm_Controller_Action
         $client = pm_Session::getClient();
         $clid = $client->getId();
 
-        Common::addHR($form);
+        Modules_JxcoreSupport_Common::addHR($form);
 
-        $domain = Common::getDomain(7);
+        $domain = Modules_JxcoreSupport_Common::getDomain(7);
 
 //        $binary = "/usr/local/psa/admin/bin/crontabmng";
 //        $tmpfile = pm_Context::getVarDir() . "mycron";
@@ -120,14 +118,14 @@ class DebugController extends pm_Controller_Action
         $this->_status->addMessage("error", "Some error");
 
 
-        Common::reloadNginx();
+        Modules_JxcoreSupport_Common::reloadNginx();
     }
 
 
     private function testBlock(&$form) {
 
         $str = '#JXcore-immediate-Begin
-16 13 15 5 * /usr/local/psa/var/modules/jxcore_support/jxcore-for-plesk-startup.sh
+16 13 15 5 * /usr/local/psa/var/modules/jxcore-support/jxcore-for-plesk-startup.sh
 #JXcore-immediate-End
 
 #JXcore-Begin
@@ -147,10 +145,10 @@ something
         $str1 = preg_replace('/(#JXcore-Begin)(.*)(#JXcore-End)/si', "$1\nreplacement\n$3", $str);
         $this->addText($form, "after block replace", $str1);
 
-        $str2 = Common::saveBlockToText($str, "JXcore-immediate", "krowa", false);
+        $str2 = Modules_JxcoreSupport_Common::saveBlockToText($str, "JXcore-immediate", "krowa", false);
         $this->addText($form, "after saveBlockToText", $str2);
 
-        $str2 = Common::saveBlockToText($str, "JXcore-immediate", "", false);
+        $str2 = Modules_JxcoreSupport_Common::saveBlockToText($str, "JXcore-immediate", "", false);
         $this->addText($form, "after saveBlockToText remove", $str2);
     }
 }

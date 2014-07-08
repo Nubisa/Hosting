@@ -9,18 +9,16 @@ class SubscriptionController extends pm_Controller_Action
     {
         parent::init();
 
-        require_once("CustomStatus.php");
-        if(CustomStatus::CheckStatusRender($this)) // Plesk12
+        if(Modules_JxcoreSupport_CustomStatus::CheckStatusRender($this)) // Plesk12
         {
-            $this->_status = new CustomStatus($this->view);
-            $this->view->status = new CustomStatus($this->view);
+            $this->_status = new Modules_JxcoreSupport_CustomStatus($this->view);
+            $this->view->status = new Modules_JxcoreSupport_CustomStatus($this->view);
         }
 
 
         $this->view->pageTitle = 'JXcore - subscription configuration';
 
-        require_once("common.php");
-        $this->common = new Common($this, $this->_status);
+        $this->common = new Modules_JxcoreSupport_Common($this, $this->_status);
 
         $this->ID = $this->getRequest()->getParam('id');
         if (!ctype_digit($this->ID)) unset($this->ID);
@@ -37,7 +35,7 @@ class SubscriptionController extends pm_Controller_Action
         }
 
         $this->subscription = SubscriptionInfo::getSubscription($this->ID);
-        $this->view->breadCrumb = 'Navigation: <a href="' . Common::$urlJXcoreSubscriptions . '">Subscriptions</a> -> ' . $this->subscription->mainDomain->name;
+        $this->view->breadCrumb = 'Navigation: <a href="' . Modules_JxcoreSupport_Common::$urlJXcoreSubscriptions . '">Subscriptions</a> -> ' . $this->subscription->mainDomain->name;
     }
 
     public function indexAction()
@@ -48,7 +46,12 @@ class SubscriptionController extends pm_Controller_Action
 
     public function configAction()
     {
-        $json = Common::getMonitorJSON();
+        if (!$this->subscription) {
+            $this->view->form = "Invalid subscription ID";
+            return;
+        }
+
+        $json = Modules_JxcoreSupport_Common::getMonitorJSON();
         $monitorRunning = $json !== null;
 
         $form = new pm_Form_Simple();
@@ -69,7 +72,7 @@ class SubscriptionController extends pm_Controller_Action
         ));
 
         $form->addControlButtons(array(
-            'cancelLink' => Common::$urlJXcoreSubscriptions
+            'cancelLink' => Modules_JxcoreSupport_Common::$urlJXcoreSubscriptions
         ));
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
@@ -77,12 +80,12 @@ class SubscriptionController extends pm_Controller_Action
             $this->_status->beforeRedirect = true;
 
             $params = [
-                Common::sidDomainJXcoreAppMaxCPULimit,
-                Common::sidDomainJXcoreAppMaxCPUInterval,
-                Common::sidDomainJXcoreAppMaxMemLimit,
-                Common::sidDomainJXcoreAppAllowCustomSocketPort,
-                Common::sidDomainJXcoreAppAllowSysExec,
-                Common::sidDomainJXcoreAppAllowLocalNativeModules
+                Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxCPULimit,
+                Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxCPUInterval,
+                Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxMemLimit,
+                Modules_JxcoreSupport_Common::sidDomainJXcoreAppAllowCustomSocketPort,
+                Modules_JxcoreSupport_Common::sidDomainJXcoreAppAllowSysExec,
+                Modules_JxcoreSupport_Common::sidDomainJXcoreAppAllowLocalNativeModules
             ];
 
             foreach ($params as $param) {
@@ -95,10 +98,10 @@ class SubscriptionController extends pm_Controller_Action
                 $this->subscription->updateConfigs();
             }
 
-            $this->_helper->json(array('redirect' => Common::$urlJXcoreSubscriptions));
+            $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlJXcoreSubscriptions));
         }
 
-        $this->view->buttonsDisablingScript = Common::getButtonsDisablingScript();
+        $this->view->buttonsDisablingScript = Modules_JxcoreSupport_Common::getButtonsDisablingScript();
         $this->view->form = $form;
     }
 
