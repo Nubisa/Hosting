@@ -1551,10 +1551,11 @@ class DomainInfo
                 return;
             }
             @exec($cmd, $out, $ret);
-            // waiting for the app to be restarted by monitor
-            // cannot rely on exitcode, so checking the monitor
+            Modules_JxcoreSupport_Common::clearMonitorJSON();
+
             if (Modules_JxcoreSupport_Common::$restartFlag !== "nowait") {
-                Modules_JxcoreSupport_Common::clearMonitorJSON();
+                // waiting for the app to be restarted by monitor
+                // cannot rely on exitcode, so checking the monitor
                 $appRunning = $this->isAppRunning(true);
                 StatusMessage::infoOrError(!$appRunning, "The application {$this->name} successfully started.", "The application {$this->name} could not be started.");
             }
@@ -1563,26 +1564,19 @@ class DomainInfo
         }
     }
 
-    private function stopApp() {
-
+    private function stopApp()
+    {
         if (!$this->isAppRunning() || Modules_JxcoreSupport_Common::$restartFlag === "norestart") return;
-
-//        $nginexconf = "/etc/nginx/jxcore.conf.d/" . $this->name . ".conf";
-//        if (@file_exists($nginexconf)) {
-//            @unlink($nginexconf);
-//            Common::callService("nginx", "reload", null, "Cannot reload nginx config.");
-//            Common::reloadNginx();
-//        }
 
         $cmd = Modules_JxcoreSupport_Common::$jxpath . " monitor kill {$this->getSpawnerPath()} 2>&1";
         @exec($cmd, $out, $ret);
+        Modules_JxcoreSupport_Common::clearMonitorJSON();
 
         if (Modules_JxcoreSupport_Common::$restartFlag !== "nowait") {
             // cannot rely on exitcode, so checking the monitor
-            Modules_JxcoreSupport_Common::clearMonitorJSON();
-            StatusMessage::infoOrError($this->isAppRunning(), "The application {$this->name} successfully stopped.", "Cannot stop the application. ". join("\n", $out) . ". Exit code: $ret");
+            StatusMessage::infoOrError($this->isAppRunning(), "The application {$this->name} successfully stopped.", "Cannot stop the application. " . join("\n", $out) . ". Exit code: $ret");
         }
-           $this->configChanged = false;
+        $this->configChanged = false;
     }
 
     private function restartApp() {
@@ -1596,11 +1590,11 @@ class DomainInfo
                 $this->stopApp();
                 $this->startApp();
             } else {
-                // faster by killing teh process and letting the monitor to respawn
+                // faster by killing the process and letting the monitor to respawn
                 $out = Modules_JxcoreSupport_Common::callService("kill", $this->id, null, null, true);
+                Modules_JxcoreSupport_Common::clearMonitorJSON();
 
                 if (Modules_JxcoreSupport_Common::$restartFlag !== "nowait") {
-                    Modules_JxcoreSupport_Common::clearMonitorJSON();
                     StatusMessage::infoOrError(!$this->isAppRunning(true), "The application {$this->name} was successfully restarted.", "Could not restart the application {$this->name}. $out");
                 }
               }

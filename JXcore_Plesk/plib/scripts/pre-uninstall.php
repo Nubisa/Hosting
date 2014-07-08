@@ -62,8 +62,9 @@ try {
 
     // on plesk 12 we had sometimes exception like "The id is not atomic" or something similar
     // That prevented uninstallation of the extension
-    pm_Bootstrap::init();
-    pm_Bootstrap::getDbAdapter()->delete('custom_buttons', array("url like '%jxcore-support%'"));
-
     exit(0);
 }
+
+// removing buttons anyway
+pm_Bootstrap::init();
+pm_Bootstrap::getDbAdapter()->delete('custom_buttons', array("url like '%jxcore-support%'"));

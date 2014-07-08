@@ -1,6 +1,10 @@
 <?php
 pm_Context::init("jxcore-support");
 
+if (false !== ($upgrade = array_search('upgrade', $argv))) {
+    exit(0);
+}
+
 $iconPath = rtrim(pm_Context::getHtdocsDir(), '/') . '/images/Nubisa.ico';
 $baseUrl = pm_Context::getBaseUrl();
 
