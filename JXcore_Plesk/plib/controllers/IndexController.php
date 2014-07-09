@@ -350,7 +350,7 @@ class IndexController extends pm_Controller_Action
                 $form->addElement('simpleText', "restartmayoccur", array(
                     'label' => '',
                     'escape' => false,
-                    'value' => "<span style='color: red;'>Submitting the form will may result in restarting the monitor together with all of the applications.</span>",
+                    'value' => "<span style='color: red;'>Submitting the form may result in restarting the monitor together with all running applications.</span>",
                     'description' => ""
                 ));
 

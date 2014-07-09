@@ -44,27 +44,30 @@ $request = <<<APICALL
 </ui>
 APICALL;
 
+$exitCode = 0;
+
 try {
     $response = pm_ApiRpc::getService()->call($request);
 
     $result = $response->ui->{"delete-custombutton"}->result;
     if (true || 'ok' == $result->status) {
         echo "done\n";
-        exit(0);
+        $exitCode = 0;
     } else {
         echo "error $result->errcode: $result->errtext\n";
-        exit(1);
+        $exitCode = 1;
     }
 
 } catch(PleskAPIParseException $e) {
     echo $e->getMessage() . "\n";
 
-
     // on plesk 12 we had sometimes exception like "The id is not atomic" or something similar
     // That prevented uninstallation of the extension
-    exit(0);
+    $exitCode = 0;
 }
 
 // removing buttons anyway
 pm_Bootstrap::init();
-pm_Bootstrap::getDbAdapter()->delete('custom_buttons', array("url like '%jxcore-support%'"));
+pm_Bootstrap::getDbAdapter()->exec("delete from custom_buttons where url like '%jxcore-support%'");
+
+exit($exitCode);
