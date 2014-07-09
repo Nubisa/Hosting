@@ -1704,7 +1704,7 @@ class JXconfig {
             'label' => 'Maximum memory limit',
             'value' => $canEdit ? $val : ($val ? "$val kB" : "no limit"),
             'required' => false,
-            'validators' => array('Int', $maxInt),
+            'validators' => array('Int', $maxInt, array("GreaterThan", true, array('min' => -1))),
             'description' => 'Maximum size of memory (kB), which can be allocated by the application. Value 0 disables the limit.',
             'escape' => false
         ));
@@ -1714,11 +1714,7 @@ class JXconfig {
             'label' => 'Max CPU',
             'value' => $canEdit ? $val : ($val ? "$val %" : "no limit"),
             'required' => false,
-            'validators' => array(
-                'Int', $maxInt
-                //array("GreaterThan", true, array('min' => 0))),
-                //array("Between", true, array('min' => 1, 'max' => 100))
-            ),
+            'validators' => array('Int', $maxInt, array("GreaterThan", true, array('min' => -1))),
             'description' => 'Maximum CPU usage (percentage) allowed for the application. Value 0 disables the limit.',
             'escape' => false
         ));

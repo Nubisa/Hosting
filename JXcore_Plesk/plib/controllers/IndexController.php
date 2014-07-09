@@ -121,6 +121,7 @@ class IndexController extends pm_Controller_Action
             'required' => false,
             'validators' => array(
                 'Int',
+                array("GreaterThan", true, array('min' => -1)),
             ),
             'description' => 'Displays only last # lines of the log file. Enter 0 to display the whole log.',
             'escape' => false
