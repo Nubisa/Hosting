@@ -186,7 +186,7 @@ var srv = https.createServer(options, function (req, res) {
                         try {
                             fs.unlinkSync(fname);
                         } catch (ex) {
-                            answer = "Cannot remove confog for the application." + ex;
+                            answer = "Cannot remove config for the application." + ex;
                         }
 
                         answer = fs.existsSync(fname) ? "Could not remove nginx config for the application." : "OK";
@@ -200,6 +200,22 @@ var srv = https.createServer(options, function (req, res) {
                     jxcore.utils.cmdSync(cmd);
 
                     answer = fs.existsSync(fname) || fs.existsSync(dir) ? "Could not remove nginx configs." : "OK";
+                }
+            }
+
+            if (parsed.query.nginx == "test") {
+                if (parsed.query.opt) {
+
+                    try {
+                        var options = JSON.parse(parsed.query.opt);
+                    } catch (ex) {
+                        answer = "Cannot parse options: " + ex;
+                    }
+
+                    if (options) {
+                        var ret = root_functions.saveNginxConfigFileForDomain(options, true);
+                        answer = ret.err || "OK";
+                    }
                 }
             }
 

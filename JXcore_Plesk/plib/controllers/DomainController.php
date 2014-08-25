@@ -150,6 +150,23 @@ class DomainController extends pm_Controller_Action
             'value' => pm_Settings::get($this->ID),
         ));
 
+        Modules_JxcoreSupport_Common::addHR($form);
+
+
+        if (Modules_JxcoreSupport_Common::$isAdmin) {
+            $validNginx =  new MyValid_NginxDirectives();
+            $validNginx->domain = $this->domain;
+            $form->addElement('textarea', Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives, array(
+                'label' => 'nginx directives',
+                'escape' => false,
+                'rows' => 4,
+                'validators' => array($validNginx),
+                'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives),
+                'description' => "Here you can specify the settings for the nginx reverse proxy server that runs in front of Apache. Use the same syntax as you use for nginx.conf. For example, if you want to pack all the proxied requests with gzip, add the line: 'gzip_proxied any;'."
+            ));
+        }
+
+
         $form->addControlButtons(array(
             'cancelLink' => Modules_JxcoreSupport_Common::$urlJXcoreDomains
         ));
@@ -169,6 +186,9 @@ class DomainController extends pm_Controller_Action
                 if (!$actionButtonPressed && !$actionRestartPressed) {
 
                     $params = [Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath, Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess];
+
+                    if (Modules_JxcoreSupport_Common::$isAdmin)
+                        $params[] = Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives;
 
                     foreach ($params as $param) {
                         $this->domain->set($param, $form->getValue($param));
@@ -360,6 +380,42 @@ class MyValid_FileName extends Zend_Validate_Abstract
         if (is_dir($fullPath)) {
             $this->cannotContain = $str;
             $this->_error(self::MSG_ISADIR);
+            return false;
+        }
+
+        return true;
+    }
+}
+
+
+
+class MyValid_NginxDirectives extends Zend_Validate_Abstract
+{
+    const MSG_ERR = 'msgErr';
+
+    public $domain = null;
+    public $msgErr = "";
+
+    protected $_messageVariables = array(
+        'msgErr' => 'msgErr'
+    );
+
+    protected $_messageTemplates = array(
+        self::MSG_ERR => "Provided directives failed on test. %msgErr%"
+    );
+
+    public function isValid($value)
+    {
+        $value = trim($value);
+
+        $this->_setValue($value);
+
+        $opt = $this->domain->getSpawnerParams(false, $value);
+        $ret = Modules_JxcoreSupport_Common::callService("nginx", "test&opt=" . $opt, null, null, true);
+
+        if ($ret !== "OK") {
+            $this->msgErr = html_entity_decode($ret);
+            $this->_error(self::MSG_ERR);
             return false;
         }
 

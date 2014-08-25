@@ -51,6 +51,7 @@ class Modules_JxcoreSupport_Common
     const sidFirstRun = "jx_first_run"; // empty when extension is started for the first time
     const sidDomainApp = "jx_domain_app"; // for storing information about domain's app (path, port etc.)
     const sidDomainAppLogWebAccess = "jx_domain_app_log_web_access";
+    const sidDomainAppNginxDirectives = "jx_domain_app_nginx_directives";
     const sidDomainJXcoreEnabled = "jx_domain_jxcore_enabled";
     const sidDomainJXcoreAppPort = "jx_domain_app_port";
     const sidDomainJXcoreAppPortSSL = "jx_domain_app_port_ssl";
@@ -1079,7 +1080,14 @@ class DomainInfo
         $changed = $old != $value;
         if ($changed) {
             $this->configChanged = true;
-            if (in_array($sid, [Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath, Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess, Modules_JxcoreSupport_Common::sidDomainJXcoreAppPort, Modules_JxcoreSupport_Common::sidDomainJXcoreAppPortSSL]))
+            if (in_array($sid,
+                    [
+                        Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath,
+                        Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess,
+                        Modules_JxcoreSupport_Common::sidDomainJXcoreAppPort,
+                        Modules_JxcoreSupport_Common::sidDomainJXcoreAppPortSSL,
+                        Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives
+                    ]))
                 $this->nginxConfigChanged = true;
         }
     }
@@ -1308,7 +1316,7 @@ class DomainInfo
      * @param $additionalParams
      * @return string
      */
-    private function getSpawnerParams()
+    public function getSpawnerParams($quote = true, $nginxDirectives = null)
     {
         $additionalParams = array(
             "user" => $this->sysUser,
@@ -1317,6 +1325,7 @@ class DomainInfo
             "domain" => $this->name,
             "tcp" => $this->getAppPort(),
             "tcps" => $this->getAppPort(true),
+            "nginx" => $nginxDirectives ? $nginxDirectives : $this->get(Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives),
             "logWebAccess" => $this->getAppLogWebAccess());
 
         $arr = [];
@@ -1326,7 +1335,10 @@ class DomainInfo
             $arr[] = "\"{$key}\" : \"{$val}\"";
         }
 
-        $json = "'{ " . join(", ", $arr) . "}'";
+        $json = "{ " . join(", ", $arr) . "}";
+        if ($quote)
+            $json = "'" . $json . "'";
+
         return $json;
     }
 
@@ -1456,6 +1468,13 @@ class DomainInfo
             // as non-strings
             foreach ($params as $key => $sid) {
                 $val = $this->getFinalConfigValue($sid);
+
+                if ($val === 0 || $val === "0") {
+                    // 0 means disable the limit
+                    if ($key === "maxCPU" || $key === "maxMemory")
+                        continue;
+                }
+
                 if (trim($val) != "") {
                     $arr[] = "\"{$key}\" : {$val}";
                 }
@@ -1551,6 +1570,8 @@ class DomainInfo
                 return;
             }
             @exec($cmd, $out, $ret);
+
+            //StatusMessage::addDebug(join("\n",$out));
             Modules_JxcoreSupport_Common::clearMonitorJSON();
 
             if (Modules_JxcoreSupport_Common::$restartFlag !== "nowait") {

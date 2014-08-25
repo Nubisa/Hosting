@@ -138,25 +138,11 @@ if (!isRoot || !respawned) {
     var file = options.file;
 
     // ########  saving nginx conf
-    var confDir = "/etc/nginx/jxcore.conf.d/";
-    var confFile = confDir + options.domain + ".conf";
+    var ret = root_functions.saveNginxConfigFileForDomain(options);
+    if (ret.err)
+        log(ret.err, true)
 
-    if (fs.existsSync(confDir)) {
-        var nginx = require("./nginxconf.js");
-        nginx.resetInterfaces();
-        var logWebAccess = options.logWebAccess == 1 || options.logWebAccess == "true";
-        var conf = nginx.createConfig(options.domain, [ options.tcp, options.tcps], logWebAccess ? pathModule.dirname(logPath) : null);
 
-        try {
-            fs.writeFileSync(confFile, conf);
-            var ret = jxcore.utils.cmdSync("chown psaadm:nginx " + confFile + ";");
-            if (ret.exitCode) {
-                log("Cannot set ownership for nginx config: " + ret.out);
-            }
-        } catch (ex) {
-            log("Cannot save nginx conf file: " + ex);
-        }
-    }
 
     delete options.log;
     delete options.user;

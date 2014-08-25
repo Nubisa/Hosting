@@ -20,11 +20,20 @@ exports.resetInterfaces = function(){
 
 exports.resetInterfaces();
 
-exports.createConfig = function(domain, node_ports, log_location){ // node_ports is an array (first http, second https)
+exports.createConfig = function(domain, node_ports, log_location, directives){ // node_ports is an array (first http, second https)
     var config_str = "map $http_upgrade $connection_upgrade {\n"
         +"  default upgrade;\n"
         +"  '' close;\n"
         +"}\n\n";
+
+    if (directives) {
+        directives = directives.trim() + ";";
+        directives = '    #plan`s directives\n    '
+            + directives.replace(/\n/g, '').replace(/;;/g, ";").replace(/;/g, ';\n    ').trim()
+            + "\n";
+    } else {
+        directives = ""
+    }
 
     var sports = ["80", "443"];
     for(var i in sports){
@@ -41,11 +50,12 @@ exports.createConfig = function(domain, node_ports, log_location){ // node_ports
                     +"    proxy_read_timeout 9999999;\n"
                     +"    proxy_http_version 1.1;\n"
                     +"    proxy_set_header Upgrade $http_upgrade;\n"
-                    +"    proxy_set_header Connection \"Upgrade\";\n"
+                    +"    proxy_set_header Connection \"Upgrade\";\n" + directives
                     +"  }\n"
                     +"  location /jxcore_logs {\n"
                     +"    autoindex on;\n"
                     +"    alias "+log_location+";\n"
+                    +"    add_header Content-type text/plain;\n"
                     +"  }\n"
                     +"}\n";
 

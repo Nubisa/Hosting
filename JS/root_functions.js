@@ -91,3 +91,63 @@ exports.getUID = function(username) {
         return uid;
     }
 };
+
+
+/*
+options:
+
+ opt: {
+     "user" : "krisuser",
+     "log" : "/var/www/vhosts/krissubscription.com/httpdocs/jxcore_logs/index.txt",
+     "file" : "/var/www/vhosts/krissubscription.com/httpdocs/index.js",
+     "domain" : "krissubscription.com",
+     "tcp" : "10008",
+     "tcps" : "10009",
+     "nginx" : "",
+     "logWebAccess" : "0"}
+ }
+ */
+exports.saveNginxConfigFileForDomain = function(options, onlyForTest) {
+
+    var confDir = "/etc/nginx/jxcore.conf.d/";
+    // for test we don't add .conf ext so nginx will not take this file during reloading
+    var confFile = confDir + options.domain + (onlyForTest ? "" : ".conf");
+
+    if (fs.existsSync(confDir)) {
+        var nginx = require("./nginxconf.js");
+        nginx.resetInterfaces();
+        var logWebAccess = options.logWebAccess == 1 || options.logWebAccess == "true";
+        var conf = nginx.createConfig(options.domain, [ options.tcp, options.tcps], logWebAccess ? path.dirname(options.log) : null, options.nginx);
+
+        if (onlyForTest) {
+            conf = "events {} http { \n" + conf + "\n}";
+        }
+
+        try {
+            fs.writeFileSync(confFile, conf);
+            var ret = jxcore.utils.cmdSync("chown psaadm:nginx " + confFile + ";");
+            if (ret.exitCode)
+                return { err : "Cannot set ownership for nginx config: " + ret.out };
+        } catch (ex) {
+            return { err : "Cannot save nginx conf file: " };
+        }
+
+        var ret = jxcore.utils.cmdSync("/usr/sbin/nginx -t -c " + confFile);
+        if (ret.out.toString().indexOf("failed") !== -1) {
+            return { err : ret.out.replace(new RegExp(confDir, "ig"), "[...]") };
+        }
+
+        if (onlyForTest) {
+            try {
+//                console.log("saved", confFile);
+                fs.unlinkSync(confFile);
+            } catch(ex){}
+        }
+
+        return false;
+    } else {
+        return { err : "Nginx config dir does not exists." };
+    }
+
+
+};
