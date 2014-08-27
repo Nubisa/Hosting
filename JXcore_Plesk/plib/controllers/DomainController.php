@@ -125,6 +125,38 @@ class DomainController extends pm_Controller_Action
             ));
         }
 
+        Modules_JxcoreSupport_Common::addHR($form);
+
+        $form->addElement('checkbox', Modules_JxcoreSupport_Common::sidDomainAppUseSSL, array(
+            'label' => 'Enable SSL',
+            'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainAppUseSSL)
+        ));
+
+        $validFileName_cert =  new MyValid_CertFileName();
+        $validFileName_cert->domain = $this->domain;
+        $form->addElement('text', Modules_JxcoreSupport_Common::sidDomainAppSSLCert, array(
+            'label' => 'SSL certificate file',
+            'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainAppSSLCert),
+            'validators' => array($validFileName_cert),
+            'filters' => array('StringTrim'),
+            'required' => $this->getRequest()->getParam(Modules_JxcoreSupport_Common::sidDomainAppUseSSL),
+            'description' => "The path is relative to domain root folder, e.g. `certificates/my_domain.cert`",
+            'escape' => false
+        ));
+
+        $validFileName_key =  new MyValid_CertFileName();
+        $validFileName_key->domain = $this->domain;
+        $form->addElement('text', Modules_JxcoreSupport_Common::sidDomainAppSSLKey, array(
+            'label' => 'SSL certificate key file',
+            'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainAppSSLKey),
+            'validators' => array($validFileName_key),
+            'filters' => array('StringTrim'),
+            'required' => $this->getRequest()->getParam(Modules_JxcoreSupport_Common::sidDomainAppUseSSL),
+            'description' => "The path is relative to domain root folder, e.g. `certificates/my_domain.key`",
+            'escape' => false
+        ));
+
+
         JXconfig::addConfigToForm($form, $this->ID, true);
 
         Modules_JxcoreSupport_Common::addHR($form);
@@ -185,7 +217,13 @@ class DomainController extends pm_Controller_Action
             } else
                 if (!$actionButtonPressed && !$actionRestartPressed) {
 
-                    $params = [Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath, Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess];
+                    $params = [
+                        Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath,
+                        Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess,
+                        Modules_JxcoreSupport_Common::sidDomainAppUseSSL,
+                        Modules_JxcoreSupport_Common::sidDomainAppSSLCert,
+                        Modules_JxcoreSupport_Common::sidDomainAppSSLKey
+                    ];
 
                     if (Modules_JxcoreSupport_Common::$isAdmin)
                         $params[] = Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives;
@@ -416,6 +454,139 @@ class MyValid_NginxDirectives extends Zend_Validate_Abstract
         if ($ret !== "OK") {
             $this->msgErr = html_entity_decode($ret);
             $this->_error(self::MSG_ERR);
+            return false;
+        }
+
+        return true;
+    }
+}
+
+
+
+class MyValid_CertFileName extends Zend_Validate_Abstract
+{
+    const MSG_CANNOTCONTAIN = 'msgCannotContain';
+    const MSG_CANNOTSTART = 'msgCannotStart';
+    const MSG_ISADIR = 'msgIsaDir';
+    const MSG_NOTEXISTS = 'msgNotExists';
+
+    public $cannotContain = 0;
+    public $cannotStart = 0;
+    public $domain = null;
+    public $enableSSL = false;
+
+    protected $_messageVariables = array(
+        'cannotContain' => 'cannotContain',
+        'cannotStart' => 'cannotStart'
+    );
+
+    protected $_messageTemplates = array(
+        self::MSG_CANNOTCONTAIN => "The file name cannot contain '%cannotContain%'.",
+        self::MSG_CANNOTSTART => "The file name cannot start with a '%cannotStart%'.",
+        self::MSG_ISADIR => "Provided path exists and is a directory.",
+        self::MSG_NOTEXISTS => "The file does not exist."
+    );
+
+    public function isValid($value)
+    {
+        $value = trim($value);
+        $fullPath = $this->domain->rootFolder . $value;
+
+        if (!file_exists($fullPath)) {
+            $this->_error(self::MSG_NOTEXISTS);
+            return false;
+        }
+
+        $this->_setValue($value);
+
+        $forbidden = [ './', '/.', '.\\', '\\.'  ];
+        foreach($forbidden as $str) {
+            if (strpos($value, $str) !== false) {
+                $this->cannotContain = $str;
+                $this->_error(self::MSG_CANNOTCONTAIN);
+                return false;
+            }
+        }
+
+        $forbidden = [ '/', '\\'];
+        foreach($forbidden as $str) {
+            if (substr($value, 0, strlen($str)) === $str) {
+                $this->cannotStart = $str;
+                $this->_error(self::MSG_CANNOTSTART);
+                return false;
+            }
+        }
+
+
+        if (is_dir($fullPath)) {
+            $this->cannotContain = $str;
+            $this->_error(self::MSG_ISADIR);
+            return false;
+        }
+
+        return true;
+    }
+}
+
+
+class MyValid_CertFileName_old extends Zend_Validate_Abstract
+{
+    const MSG_CANNOTCONTAIN = 'msgCannotContain';
+    const MSG_CANNOTSTART = 'msgCannotStart';
+    const MSG_ISADIR = 'msgIsaDir';
+    const MSG_REQUIRED = 'msgRequired';
+
+    public $cannotContain = 0;
+    public $cannotStart = 0;
+    public $domain = null;
+    public $enableSSL = false;
+
+    protected $_messageVariables = array(
+        'cannotContain' => 'cannotContain',
+        'cannotStart' => 'cannotStart'
+    );
+
+    protected $_messageTemplates = array(
+        self::MSG_CANNOTCONTAIN => "The file name cannot contain '%cannotContain%'.",
+        self::MSG_CANNOTSTART => "The file name cannot start with a '%cannotStart%'.",
+        self::MSG_ISADIR => "Provided path exists and is a directory.",
+        self::MSG_REQUIRED => "The value cannot be empty while `Enable SSL` is checked."
+    );
+
+    public function isValid($value)
+    {
+        $value = trim($value);
+        //if (substr($value, 0, 1) == "/") $value = substr($value, 1);
+
+        if (!$value) {
+            $this->_error(self::MSG_REQUIRED);
+            return false;
+        }
+
+        $this->_setValue($value);
+
+        $forbidden = [ './', '/.', '.\\', '\\.'  ];
+        foreach($forbidden as $str) {
+            if (strpos($value, $str) !== false) {
+                $this->cannotContain = $str;
+                $this->_error(self::MSG_CANNOTCONTAIN);
+                return false;
+            }
+        }
+
+        $forbidden = [ '/', '\\'];
+        foreach($forbidden as $str) {
+            if (substr($value, 0, strlen($str)) === $str) {
+                $this->cannotStart = $str;
+                $this->_error(self::MSG_CANNOTSTART);
+                return false;
+            }
+        }
+
+        $fullPath = $this->domain->rootFolder . $value;
+        if (is_dir($fullPath)) {
+            $this->cannotContain = $str;
+            $this->_error(self::MSG_ISADIR);
             return false;
         }
 

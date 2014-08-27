@@ -50,6 +50,10 @@ class Modules_JxcoreSupport_Common
     const sidMonitorEnabled = "jx_global_monitor_enabled"; // monitor start on reboot
     const sidFirstRun = "jx_first_run"; // empty when extension is started for the first time
     const sidDomainApp = "jx_domain_app"; // for storing information about domain's app (path, port etc.)
+    const sidDomainAppUseSSL = "jx_domain_app_use_SSL";
+    const sidDomainAppSSLCert = "jx_domain_app_ssl_cert";
+    const sidDomainAppSSLKey = "jx_domain_app_ssl_key";
+
     const sidDomainAppLogWebAccess = "jx_domain_app_log_web_access";
     const sidDomainAppNginxDirectives = "jx_domain_app_nginx_directives";
     const sidDomainJXcoreEnabled = "jx_domain_jxcore_enabled";
@@ -393,10 +397,11 @@ class Modules_JxcoreSupport_Common
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         $data = curl_exec($ch);
-        curl_close($ch);
 
         $ok = $data !== false;
         $output = $ok ? $data : curl_error($ch);
+
+        curl_close($ch);
 
         return $ok;
     }
@@ -1086,7 +1091,10 @@ class DomainInfo
                         Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess,
                         Modules_JxcoreSupport_Common::sidDomainJXcoreAppPort,
                         Modules_JxcoreSupport_Common::sidDomainJXcoreAppPortSSL,
-                        Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives
+                        Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives,
+                        Modules_JxcoreSupport_Common::sidDomainAppUseSSL,
+                        Modules_JxcoreSupport_Common::sidDomainAppSSLCert,
+                        Modules_JxcoreSupport_Common::sidDomainAppSSLKey
                     ]))
                 $this->nginxConfigChanged = true;
         }
@@ -1173,7 +1181,8 @@ class DomainInfo
                     $portSSL .= "<br><span style='color: orangered'>TCPS port out of range.</span>";
                 }
 
-                return Modules_JxcoreSupport_Common::getIcon($this->isAppRunning(), "Running on TCP: $port, TCPS: $portSSL", "Not running");
+//                return Modules_JxcoreSupport_Common::getIcon($this->isAppRunning(), "Running on TCP: $port, TCPS: $portSSL", "Not running");
+                return Modules_JxcoreSupport_Common::getIcon($this->isAppRunning(), "Running on TCP: $port", "Not running");
             } else {
 //                $ret = Common::checkCronScheduleStatus(false);
 //                $str = ($ret && $ret > 0) ? "<br>Monitor is starting in $ret secs." : "Monitor offline.";
@@ -1327,6 +1336,11 @@ class DomainInfo
             "tcps" => $this->getAppPort(true),
             "nginx" => $nginxDirectives ? $nginxDirectives : $this->get(Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives),
             "logWebAccess" => $this->getAppLogWebAccess());
+
+       if ($this->get(Modules_JxcoreSupport_Common::sidDomainAppUseSSL)) {
+            $additionalParams["ssl_key"] = $this->rootFolder . $this->get(Modules_JxcoreSupport_Common::sidDomainAppSSLKey);
+            $additionalParams["ssl_crt"] = $this->rootFolder . $this->get(Modules_JxcoreSupport_Common::sidDomainAppSSLCert);
+        }
 
         $arr = [];
 

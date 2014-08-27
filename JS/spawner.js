@@ -138,9 +138,13 @@ if (!isRoot || !respawned) {
     var file = options.file;
 
     // ########  saving nginx conf
-    var ret = root_functions.saveNginxConfigFileForDomain(options);
-    if (ret.err)
-        log(ret.err, true)
+    try {
+        var ret = root_functions.saveNginxConfigFileForDomain(options);
+        if (ret.err)
+            log(ret.err, true);
+    } catch(ex) {
+        log(ex.toString(), true);
+    }
 
 
 

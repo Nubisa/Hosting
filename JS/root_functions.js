@@ -113,11 +113,16 @@ exports.saveNginxConfigFileForDomain = function(options, onlyForTest) {
     // for test we don't add .conf ext so nginx will not take this file during reloading
     var confFile = confDir + options.domain + (onlyForTest ? "" : ".conf");
 
+    var ssl_info = null;
+    if (options.ssl_key && options.ssl_crt) {
+        ssl_info = { key : options.ssl_key, crt : options.ssl_crt };
+    }
+
     if (fs.existsSync(confDir)) {
         var nginx = require("./nginxconf.js");
         nginx.resetInterfaces();
         var logWebAccess = options.logWebAccess == 1 || options.logWebAccess == "true";
-        var conf = nginx.createConfig(options.domain, [ options.tcp, options.tcps], logWebAccess ? path.dirname(options.log) : null, options.nginx);
+        var conf = nginx.createConfig(options.domain, [ options.tcp, options.tcps], logWebAccess ? path.dirname(options.log) : null, options.nginx, ssl_info);
 
         if (onlyForTest) {
             conf = "events {} http { \n" + conf + "\n}";
@@ -132,16 +137,17 @@ exports.saveNginxConfigFileForDomain = function(options, onlyForTest) {
             return { err : "Cannot save nginx conf file: " };
         }
 
-        var ret = jxcore.utils.cmdSync("/usr/sbin/nginx -t -c " + confFile);
-        if (ret.out.toString().indexOf("failed") !== -1) {
-            return { err : ret.out.replace(new RegExp(confDir, "ig"), "[...]") };
-        }
-
         if (onlyForTest) {
+            // testing conf file
+            var ret = jxcore.utils.cmdSync("/usr/sbin/nginx -t -c " + confFile);
+
             try {
-//                console.log("saved", confFile);
                 fs.unlinkSync(confFile);
             } catch(ex){}
+
+            if (ret.out.toString().indexOf("failed") !== -1) {
+                return { err : ret.out.replace(new RegExp(confDir, "ig"), "[...]") };
+            }
         }
 
         return false;
