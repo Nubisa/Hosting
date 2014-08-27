@@ -37,6 +37,10 @@ class IndexController extends pm_Controller_Action
                     'title' => 'Subscriptions',
                     'action' => 'listsubscriptions'
                 ),
+                array(
+                    'title' => 'jxcore.com',
+                    'action' => 'jxcoresite'
+                )
             );
         }
     }
@@ -162,6 +166,12 @@ class IndexController extends pm_Controller_Action
     {
         if ($this->redirect()) return;
         $this->_forward('jxcore');
+    }
+
+    public function jxcoresiteAction() {
+        $str = "";
+        Modules_JxcoreSupport_Common::getURL("http://jxcore.com/docs/", $str);
+        $this->view->jxcoreSiteContents = $str;
     }
 
     /**
