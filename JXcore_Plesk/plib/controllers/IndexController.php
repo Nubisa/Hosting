@@ -165,7 +165,10 @@ class IndexController extends pm_Controller_Action
     public function indexAction()
     {
         if ($this->redirect()) return;
-        $this->_forward('jxcoresite');
+        if (Modules_JxcoreSupport_Common::$isAdmin)
+            $this->_forward('jxcoresite');
+        else
+             $this->_forward('jxcore');
     }
 
     public function jxcoresiteAction() {
