@@ -1493,6 +1493,7 @@ class DomainInfo
                     $arr[] = "\"{$key}\" : {$val}";
                 }
             }
+            $arr[] = "\"allowMonitoringAPI\" : false";
 
             $json = "{ " . join(", ", $arr) . "}";
 

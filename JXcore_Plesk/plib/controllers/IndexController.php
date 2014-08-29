@@ -22,6 +22,10 @@ class IndexController extends pm_Controller_Action
 
             $this->view->tabs = array(
                 array(
+                    'title' => 'Welcome',
+                    'action' => 'jxcoresite'
+                ),
+                array(
                     'title' => 'JXcore Configuration',
                     'action' => 'jxcore',
                 ),
@@ -36,10 +40,6 @@ class IndexController extends pm_Controller_Action
                 array(
                     'title' => 'Subscriptions',
                     'action' => 'listsubscriptions'
-                ),
-                array(
-                    'title' => 'jxcore.com',
-                    'action' => 'jxcoresite'
                 )
             );
         }
@@ -165,12 +165,12 @@ class IndexController extends pm_Controller_Action
     public function indexAction()
     {
         if ($this->redirect()) return;
-        $this->_forward('jxcore');
+        $this->_forward('jxcoresite');
     }
 
     public function jxcoresiteAction() {
         $str = "";
-        Modules_JxcoreSupport_Common::getURL("http://jxcore.com/docs/", $str);
+        Modules_JxcoreSupport_Common::getURL("https://nodejx.s3.amazonaws.com/plesk_help.html", $str);
         $this->view->jxcoreSiteContents = $str;
     }
 
