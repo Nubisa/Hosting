@@ -132,6 +132,12 @@ class DomainController extends pm_Controller_Action
             'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainAppUseSSL)
         ));
 
+        $form->addElement('simpleText', "sslInfo", array(
+            'label' => '',
+            'escape' => false,
+            'value' => "<span style='color: gray; margin-top: -40px; margin-bottom: 20px;'>When you enable SSL option, no changes in Node application are required. Just keep non-SSL (http) server running in your application, and SSL will be applied automatically with certificate files provided below.</span><br>&nbsp;"
+        ));
+
         $validFileName_cert =  new MyValid_CertFileName();
         $validFileName_cert->domain = $this->domain;
         $form->addElement('text', Modules_JxcoreSupport_Common::sidDomainAppSSLCert, array(
@@ -518,72 +524,6 @@ class MyValid_CertFileName extends Zend_Validate_Abstract
         }
 
 
-        if (is_dir($fullPath)) {
-            $this->cannotContain = $str;
-            $this->_error(self::MSG_ISADIR);
-            return false;
-        }
-
-        return true;
-    }
-}
-
-
-class MyValid_CertFileName_old extends Zend_Validate_Abstract
-{
-    const MSG_CANNOTCONTAIN = 'msgCannotContain';
-    const MSG_CANNOTSTART = 'msgCannotStart';
-    const MSG_ISADIR = 'msgIsaDir';
-    const MSG_REQUIRED = 'msgRequired';
-
-    public $cannotContain = 0;
-    public $cannotStart = 0;
-    public $domain = null;
-    public $enableSSL = false;
-
-    protected $_messageVariables = array(
-        'cannotContain' => 'cannotContain',
-        'cannotStart' => 'cannotStart'
-    );
-
-    protected $_messageTemplates = array(
-        self::MSG_CANNOTCONTAIN => "The file name cannot contain '%cannotContain%'.",
-        self::MSG_CANNOTSTART => "The file name cannot start with a '%cannotStart%'.",
-        self::MSG_ISADIR => "Provided path exists and is a directory.",
-        self::MSG_REQUIRED => "The value cannot be empty while `Enable SSL` is checked."
-    );
-
-    public function isValid($value)
-    {
-        $value = trim($value);
-        //if (substr($value, 0, 1) == "/") $value = substr($value, 1);
-
-        if (!$value) {
-            $this->_error(self::MSG_REQUIRED);
-            return false;
-        }
-
-        $this->_setValue($value);
-
-        $forbidden = [ './', '/.', '.\\', '\\.'  ];
-        foreach($forbidden as $str) {
-            if (strpos($value, $str) !== false) {
-                $this->cannotContain = $str;
-                $this->_error(self::MSG_CANNOTCONTAIN);
-                return false;
-            }
-        }
-
-        $forbidden = [ '/', '\\'];
-        foreach($forbidden as $str) {
-            if (substr($value, 0, strlen($str)) === $str) {
-                $this->cannotStart = $str;
-                $this->_error(self::MSG_CANNOTSTART);
-                return false;
-            }
-        }
-
-        $fullPath = $this->domain->rootFolder . $value;
         if (is_dir($fullPath)) {
             $this->cannotContain = $str;
             $this->_error(self::MSG_ISADIR);
