@@ -28,11 +28,11 @@ class Modules_JxcoreSupport_CustomStatus
 
 
         if(!$arr)
-            $arr = [];
+            $arr = array();
         else
             $arr = unserialize($arr);
 
-        $msg = [];
+        $msg = array();
         $msg[] = $type;
         $msg[] = $message;
 
@@ -55,7 +55,7 @@ class Modules_JxcoreSupport_CustomStatus
             foreach($arr as $msg) {
                 $this->addMessage($msg[0], $msg[1]);
             }
-            pm_Settings::set($sid, serialize([]) );
+            pm_Settings::set($sid, serialize(array()) );
         }
     }
 

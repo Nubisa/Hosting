@@ -81,14 +81,14 @@ class SubscriptionController extends pm_Controller_Action
 
             $this->_status->beforeRedirect = true;
 
-            $params = [
+            $params = array(
                 Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxCPULimit,
                 Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxCPUInterval,
                 Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxMemLimit,
                 Modules_JxcoreSupport_Common::sidDomainJXcoreAppAllowCustomSocketPort,
                 Modules_JxcoreSupport_Common::sidDomainJXcoreAppAllowSysExec,
                 Modules_JxcoreSupport_Common::sidDomainJXcoreAppAllowLocalNativeModules
-            ];
+            );
 
             foreach ($params as $param) {
                 $this->subscription->set($param, $form->getValue($param));

@@ -84,7 +84,7 @@ class DomainController extends pm_Controller_Action
         // $canEnable = $this->domain->canEnable();
         $canEnable = true;
         $button = $canEnable === true ?
-            Modules_JxcoreSupport_Common::getButtonStartStop($jxEnabled, Modules_JxcoreSupport_Common::sidDomainJXcoreEnabled, ["Enabled", "Enable"], ["Disabled", "Disable"]) :
+            Modules_JxcoreSupport_Common::getButtonStartStop($jxEnabled, Modules_JxcoreSupport_Common::sidDomainJXcoreEnabled, array("Enabled", "Enable"), array("Disabled", "Disable")) :
             Modules_JxcoreSupport_Common::getIcon($jxEnabled, "Enabled", "Disabled");
 
         $restartButton = $monitorRunning && $jxEnabled ? Modules_JxcoreSupport_Common::getSimpleButton($sidRestart, "Restart application", "restart", "/theme/icons/16/plesk/show-all.png") : "";
@@ -213,7 +213,7 @@ class DomainController extends pm_Controller_Action
             $this->_status->beforeRedirect = true;
 
             $actionValue = $this->getRequest()->getParam(Modules_JxcoreSupport_Common::sidDomainJXcoreEnabled);
-            $actionButtonPressed = in_array($actionValue, ["start", "stop"]);
+            $actionButtonPressed = in_array($actionValue, array("start", "stop"));
 
             $restartActionValue = $this->getRequest()->getParam($sidRestart);
             $actionRestartPressed = $restartActionValue === "restart";
@@ -223,13 +223,13 @@ class DomainController extends pm_Controller_Action
             } else
                 if (!$actionButtonPressed && !$actionRestartPressed) {
 
-                    $params = [
+                    $params = array(
                         Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath,
                         Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess,
                         Modules_JxcoreSupport_Common::sidDomainAppUseSSL,
                         Modules_JxcoreSupport_Common::sidDomainAppSSLCert,
                         Modules_JxcoreSupport_Common::sidDomainAppSSLKey
-                    ];
+                    );
 
                     if (Modules_JxcoreSupport_Common::$isAdmin)
                         $params[] = Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives;
@@ -351,14 +351,14 @@ class DomainController extends pm_Controller_Action
 
         $form->addElement('simpleText', "ghost", array(
             'label' => 'Ghost blogging',
-            'value' => Modules_JxcoreSupport_Common::getButtonStartStop($ghostInstalled, $sidGhostBlogging, ["Installed", "Install"], ["Not installed", "Remove"]),
+            'value' => Modules_JxcoreSupport_Common::getButtonStartStop($ghostInstalled, $sidGhostBlogging, array("Installed", "Install"), array("Not installed", "Remove")),
             'escape' => false
         ));
 
         if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
             $this->_status->beforeRedirect = true;
             $actionGhostValue = $this->getRequest()->getParam($sidGhostBlogging);
-            $actionGhostPressed = in_array($actionGhostValue, ["start", "stop"]);
+            $actionGhostPressed = in_array($actionGhostValue, array("start", "stop"));
 
             $val = $form->getValue($sidLastLinesCount);
 
@@ -402,7 +402,7 @@ class MyValid_FileName extends Zend_Validate_Abstract
 
         $this->_setValue($value);
 
-        $forbidden = [ './', '/.', '.\\', '\\.'  ];
+        $forbidden = array( './', '/.', '.\\', '\\.'  );
         foreach($forbidden as $str) {
             if (strpos($value, $str) !== false) {
                 $this->cannotContain = $str;
@@ -411,7 +411,7 @@ class MyValid_FileName extends Zend_Validate_Abstract
             }
         }
 
-        $forbidden = [ '/', '\\'];
+        $forbidden = array( '/', '\\' );
         foreach($forbidden as $str) {
             if (substr($value, 0, strlen($str)) === $str) {
                 $this->cannotStart = $str;
@@ -505,7 +505,7 @@ class MyValid_CertFileName extends Zend_Validate_Abstract
 
         $this->_setValue($value);
 
-        $forbidden = [ './', '/.', '.\\', '\\.'  ];
+        $forbidden = array( './', '/.', '.\\', '\\.' );
         foreach($forbidden as $str) {
             if (strpos($value, $str) !== false) {
                 $this->cannotContain = $str;
@@ -514,7 +514,7 @@ class MyValid_CertFileName extends Zend_Validate_Abstract
             }
         }
 
-        $forbidden = [ '/', '\\'];
+        $forbidden = array( '/', '\\' );
         foreach($forbidden as $str) {
             if (substr($value, 0, strlen($str)) === $str) {
                 $this->cannotStart = $str;

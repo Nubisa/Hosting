@@ -319,7 +319,7 @@ class IndexController extends pm_Controller_Action
 //                    else  if ($cronAction == "stop")
 //                         $btn = Common::getIcon($monitorRunning, "Online", "Offline") . "<div> Monitor is scheduled to be stopped in $ret seconds.</div>";
 //                } else {
-                    $btn = Modules_JxcoreSupport_Common::getButtonStartStop($monitorRunning, $sidMonitor, ["Online", "Start"], ["Offline", "Stop"]);
+                    $btn = Modules_JxcoreSupport_Common::getButtonStartStop($monitorRunning, $sidMonitor, array("Online", "Start"), array("Offline", "Stop"));
 //                }
 
 
@@ -377,15 +377,15 @@ class IndexController extends pm_Controller_Action
 
                 $this->_status->beforeRedirect = true;
 
-                $monitorAction = in_array($req->getParam($sidMonitor), ["start", "stop"]);
-                $installAction = in_array($req->getParam($sidJXcore), ["install", "uninstall"]);
+                $monitorAction = in_array($req->getParam($sidMonitor), array("start", "stop"));
+                $installAction = in_array($req->getParam($sidJXcore), array("install", "uninstall"));
 
                 if ($monitorAction) {
                     Modules_JxcoreSupport_Common::monitorStartStop($req->getParam($sidMonitor));
                 } else if ($installAction) {
                     $this->JXcoreInstallUninstall($req->getParam($sidJXcore));
                 } else {
-                    $params = [Modules_JxcoreSupport_Common::sidJXcoreMinimumPortNumber, Modules_JxcoreSupport_Common::sidJXcoreMaximumPortNumber];
+                    $params = array(Modules_JxcoreSupport_Common::sidJXcoreMinimumPortNumber, Modules_JxcoreSupport_Common::sidJXcoreMaximumPortNumber);
 
                     $portsChanged = false;
                     foreach ($params as $param) {
@@ -472,7 +472,7 @@ class IndexController extends pm_Controller_Action
     private function getModulesList() {
         $list = new pm_View_List_Simple($this->view, $this->_request);
 
-        $data = [];
+        $data = array();
         $info = Modules_JxcoreSupport_Common::callService("modules", "info", null, null, true);
 
         $modules = explode("||", $info);
@@ -853,7 +853,7 @@ class IndexController extends pm_Controller_Action
     private function JXcoreInstallUninstall($req)
     {
         // shutting down monitor if it's online
-        if (in_array($req, ['install', 'uninstall'], true) && Modules_JxcoreSupport_Common::isJXValid()) {
+        if (in_array($req, array('install', 'uninstall'), true) && Modules_JxcoreSupport_Common::isJXValid()) {
             Modules_JxcoreSupport_Common::monitorStartStop('stop');
         }
 
@@ -955,7 +955,7 @@ class MyValid_Module extends Zend_Validate_Abstract
     {
         $this->_setValue($value);
 
-        $forbidden = [ './', '/.', '.\\', '\\.'  ];
+        $forbidden = array( './', '/.', '.\\', '\\.'  );
         foreach($forbidden as $str) {
             if (strpos($value, $str) !== false) {
                 $this->cannotContain = $str;
@@ -964,7 +964,7 @@ class MyValid_Module extends Zend_Validate_Abstract
             }
         }
 
-        $forbidden = [ '/', '\\'];
+        $forbidden = array( '/', '\\' );
         foreach($forbidden as $str) {
             if (substr($value, 0, strlen($str)) === $str) {
                 $this->cannotStart = $str;

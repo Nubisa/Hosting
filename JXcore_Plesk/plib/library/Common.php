@@ -94,9 +94,9 @@ class Modules_JxcoreSupport_Common
     private static $controller = null;
     public static $status = null;
 
-    private static $buttonsDisabling = [];
+    private static $buttonsDisabling = array();
 
-    private static $domains = [];
+    private static $domains = array();
     private static $domainsFetched = false;
 
     private static $monitorJSON = null;
@@ -133,7 +133,7 @@ class Modules_JxcoreSupport_Common
      */
     private static function getDomains() {
         if (!self::$domainsFetched) {
-            self::$domains = [];
+            self::$domains = array();
             // fetching domain list
             $dbAdapter = pm_Bootstrap::getDbAdapter();
             $sql = "SELECT d.*, h.www_root, h.sys_user_id as sysId, u.login as sysLogin, u.home as sysHome
@@ -370,7 +370,7 @@ class Modules_JxcoreSupport_Common
 
     public static function saveBlockToText($contents, $blockName, $blockBody)
     {
-        $commands = ["#{$blockName}-Begin", $blockBody, "#{$blockName}-End"];
+        $commands = array("#{$blockName}-Begin", $blockBody, "#{$blockName}-End");
 
         if (trim($blockBody) == "") {
             // removing block
@@ -416,7 +416,7 @@ class Modules_JxcoreSupport_Common
     {
         $rows = self::$domains;
 
-        $portsTaken = [];
+        $portsTaken = array();
         foreach ($rows as $id => $domain) {
             $me = $domainId && $id == $domainId;
 
@@ -456,7 +456,7 @@ class Modules_JxcoreSupport_Common
      */
     public static function getFreePortsFromTaken($takenPorts)
     {
-        $ret = [];
+        $ret = array();
         for ($a = self::$minApplicationPort; $a <= self::$maxApplicationPort; $a++) {
             if (!in_array($a, $takenPorts)) $ret[] = $a;
             if (count($ret) > 5) break;
@@ -511,12 +511,12 @@ class Modules_JxcoreSupport_Common
     public static function updateBatchAndCron()
     {
         // first we write a batch, which will be executed by cron
-        $commands = [];
+        $commands = array();
 
         $monitorEnabled = true;
 
         if ($monitorEnabled) {
-            $commands = [
+            $commands = array(
 
                 'if [ -d /etc/nginx/conf.d ] && [ ! -e /etc/nginx/conf.d/jxcore.conf ]; then',
                 'mkdir /etc/nginx/jxcore.conf.d',
@@ -531,7 +531,7 @@ class Modules_JxcoreSupport_Common
                 'cd ' . dirname(Modules_JxcoreSupport_Common::$jxpath),
                 './jx monitor start',
                 './jx monitor run ' . Modules_JxcoreSupport_Common::$pathService . " &"
-            ];
+            );
 
             foreach (self::$domains as $id=>$domain) {
                 $domain = Modules_JxcoreSupport_Common::getDomain($id);
@@ -793,7 +793,7 @@ class Modules_JxcoreSupport_Common
      * @return string
      */
     public static function getButtonsDisablingScript() {
-        $arr = [];
+        $arr = array();
         $arr[] = "<script type=\"text/javascript\">";
         $arr[] = "function JXDisableButtons() {";
 
@@ -934,7 +934,7 @@ class Modules_JxcoreSupport_Common
 
     public static function monitorStartStop($req)
     {
-        if (!self::isJXValid() || !in_array($req, ['start', 'stop', 'restart'], true)) return;
+        if (!self::isJXValid() || !in_array($req, array('start', 'stop', 'restart'), true)) return;
         $cmd = null;
 
         $json = self::getMonitorJSON();
@@ -954,7 +954,7 @@ class Modules_JxcoreSupport_Common
             }
         }
 
-        if (in_array($req, ['start', 'restart']) && !$monitorWasRunning) {
+        if (in_array($req, array('start', 'restart')) && !$monitorWasRunning) {
             self::enableServices();
             $ret = Modules_JxcoreSupport_Common::updateCronImmediate("start");
 
@@ -1033,7 +1033,7 @@ class DomainInfo
 
     public $row = null;
 
-    public $log = [];
+    public $log = array();
 
     public static function getFromRow($row) {
         $id = $row['id'];
@@ -1086,7 +1086,7 @@ class DomainInfo
         if ($changed) {
             $this->configChanged = true;
             if (in_array($sid,
-                    [
+                    array(
                         Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath,
                         Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess,
                         Modules_JxcoreSupport_Common::sidDomainJXcoreAppPort,
@@ -1095,7 +1095,7 @@ class DomainInfo
                         Modules_JxcoreSupport_Common::sidDomainAppUseSSL,
                         Modules_JxcoreSupport_Common::sidDomainAppSSLCert,
                         Modules_JxcoreSupport_Common::sidDomainAppSSLKey
-                    ]))
+                    )))
                 $this->nginxConfigChanged = true;
         }
     }
@@ -1121,7 +1121,7 @@ class DomainInfo
 
         $wasSet = $this->wasSet($sid);
 
-        $edits = [Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxMemLimit, Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxCPULimit, Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxCPUInterval];
+        $edits = array(Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxMemLimit, Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxCPULimit, Modules_JxcoreSupport_Common::sidDomainJXcoreAppMaxCPUInterval);
         if (in_array($sid, $edits) && !$vald && "$vald" !== "0" )
             $wasSet = false;
 
@@ -1342,7 +1342,7 @@ class DomainInfo
             $additionalParams["ssl_crt"] = $this->rootFolder . $this->get(Modules_JxcoreSupport_Common::sidDomainAppSSLCert);
         }
 
-        $arr = [];
+        $arr = array();
 
         // as strings
         foreach ($additionalParams as $key => $val) {
@@ -1526,7 +1526,7 @@ class DomainInfo
         $relFile = str_replace($mgr->getFilePath("."), "", $file);
 
         if ($this->JXcoreSupportEnabled()) {
-            $htaccess = [];
+            $htaccess = array();
             $htaccess[] = 'RewriteEngine On';
 
             if ($this->getAppLogWebAccess()) {
@@ -1542,7 +1542,7 @@ class DomainInfo
             $htaccess[] = 'RewriteRule ^(.*)$ https://0.0.0.0:' . $tcps . '/$1 [P]';
 
         } else {
-            $htaccess = [];
+            $htaccess = array();
         }
         $txt = "";
 
@@ -1841,7 +1841,7 @@ class SubscriptionInfo {
     public $jxdir = null;
     public $jxpath = null;
 
-    private static $subscriptions = [];
+    private static $subscriptions = array();
     private static $fetched = false;
 
     public $configChanged = false;
@@ -1994,7 +1994,7 @@ class SubscriptionInfo {
     public function get($sid) {
         $wasSet = $this->wasSet($sid);
 
-        $defaults = [];
+        $defaults = array();
         $defaults[Modules_JxcoreSupport_Common::sidDomainJXcoreAppAllowSysExec] = 1;
         $defaults[Modules_JxcoreSupport_Common::sidDomainJXcoreAppAllowLocalNativeModules] = 1;
 
@@ -2029,7 +2029,7 @@ class SubscriptionInfo {
     public function getDomains() {
         $ids = Modules_JxcoreSupport_Common::getDomainsIDs();
 
-        $ret = [];
+        $ret = array();
         foreach($ids as $id) {
             $domain = Modules_JxcoreSupport_Common::getDomain($id);
             // first condition applies to main domain of the subscription
