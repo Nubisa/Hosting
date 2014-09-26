@@ -83,17 +83,18 @@ var srv = https.createServer(options, function (req, res) {
             return;
         }
 
-        try {
-            var stats = fs.statSync(fname);
+//        try {
+//            var stats = fs.statSync(fname);
+//
+//            if (stats.uid !== psaadm_uid) {
+//                writeAnswer(res, "Wrong user id of the command.");
+//                return;
+//            }
+//        } catch (ex) {
+//            writeAnswer(res, "Cannot read stats of the command.");
+//            return;
+//        }
 
-            if (stats.uid !== psaadm_uid) {
-                writeAnswer(res, "Wrong user id of the command.");
-                return;
-            }
-        } catch (ex) {
-            writeAnswer(res, "Cannot read stats of the command.");
-            return;
-        }
 
 
         // adding http just for being able to parse the command
@@ -111,13 +112,28 @@ var srv = https.createServer(options, function (req, res) {
                 var version = nameAndVersion.slice(pos + 1).trim();
             }
 
-            var cmd = "cd " + jxconfig.globalModulePath + "; '" + process.execPath + "' install " + nameAndVersion;
-            //console.log("Installing npm module. name:", name, "version:", version, "with cmd: ", cmd);
+            var answer = "OK";
+            try {
+                var cmd = "cd " + jxconfig.globalModulePath + "; '" + process.execPath + "' install " + nameAndVersion;
+                //console.log("Installing npm module. name:", name, "version:", version, "with cmd: ", cmd);
 
-            var ret = jxcore.utils.cmdSync(cmd);
+                var ret = jxcore.utils.cmdSync(cmd);
 
-            var expectedModulePath = path.join(jxconfig.globalModulePath, "/node_modules/", name);
-            var answer = fs.existsSync(expectedModulePath) ? "OK" : "Error. " + ret.out;
+                var expectedModulePath = path.join(jxconfig.globalModulePath, "/node_modules/", name);
+//            var answer = fs.existsSync(expectedModulePath) ? "OK" : "Error. " + ret.out;
+
+                // now testing if it's installed
+                var cmd = "cd " + jxconfig.globalModulePath + "; '" + process.execPath + "' install -ls --depth=0";
+                var ret1 = jxcore.utils.cmdSync(cmd);
+                var ok = ret1.out.toString().indexOf("─ " + nameAndVersion) !== -1;
+
+                answer = ok ? "OK" : "Error. " + ret.out;
+
+                if (!ok)
+                    root_functions.rmdirSync(expectedModulePath);
+            } catch(ex) {
+                answer = ex.toString()
+            }
 
             writeAnswer(res, answer);
             return;

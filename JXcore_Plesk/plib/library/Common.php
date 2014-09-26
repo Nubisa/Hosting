@@ -57,6 +57,7 @@ class Modules_JxcoreSupport_Common
     const sidDomainAppLogWebAccess = "jx_domain_app_log_web_access";
     const sidDomainAppNginxDirectives = "jx_domain_app_nginx_directives";
     const sidDomainJXcoreEnabled = "jx_domain_jxcore_enabled";
+    const sidSubscriptionJXcoreEnabled = "jx_subscription_jxcore_enabled";
     const sidDomainJXcoreAppPort = "jx_domain_app_port";
     const sidDomainJXcoreAppPortSSL = "jx_domain_app_port_ssl";
     const sidDomainJXcoreAppPath = "jx_domain_app_path";
@@ -125,6 +126,20 @@ class Modules_JxcoreSupport_Common
     public static function getDomainsIDs () {
         self::getDomains();
         return array_keys(self::$domains);
+    }
+
+    public static function getDomainsIDsForLoggedClient () {
+        self::getDomains();
+
+        $client = pm_Session::getClient();
+        $clid = $client->getId();
+        $ids = array();
+        foreach(self::$domains as $id=>$domain) {
+            if ($clid == $domain->row['cl_id']) {
+                $ids[] = $id;
+            }
+        }
+        return $ids;
     }
 
     /**
@@ -751,7 +766,7 @@ class Modules_JxcoreSupport_Common
         return self::getIcon($flag, $captionOn, $captionOff, "display: inline-block; min-width: 80px;") . ($flag ? $btnStop : $btnStart);
     }
 
-    public static function getSimpleButton($varName, $caption, $command, $iconURL = null, $url = null, $additionalStyle = null)
+    public static function getSimpleButton($varName, $caption, $command, $iconURL = null, $url = null, $additionalStyle = null, $askConfirm = false)
     {
         $style = "vertical-align: middle; display: inline-block;";
         $iconStyle = "style=\"$style margin-right: 7px;\"";
@@ -762,7 +777,8 @@ class Modules_JxcoreSupport_Common
             // form
             $btnstyle = "style='height: 15px; margin-left: 20px; margin-bottom: 6px; margin-top: 6px; $style $additionalStyle'";
             $onclick = "href=\"#\"";
-            if ($command) $onclick .= " onclick=\"document.getElementById('{$varName}').value = '{$command}'; if (JXDisableButtons) { JXDisableButtons(); }; document.getElementById('pm-form-simple').submit();\"";
+            $ask = $askConfirm ? "if (!confirm('{$askConfirm}')) return false; " : "";
+            if ($command) $onclick .= " onclick=\"{$ask}document.getElementById('{$varName}').value = '{$command}'; if (JXDisableButtons) { JXDisableButtons(); }; document.getElementById('pm-form-simple').submit();\"";
         } else {
             // list
             $btnstyle = "style='height: 15px; margin-left: 20px; $style $additionalStyle'";
@@ -1194,9 +1210,18 @@ class DomainInfo
         }
     }
 
-    public function JXcoreSupportEnabled()
+    public function JXcoreSupportEnabled_Value()
     {
         return $this->get(Modules_JxcoreSupport_Common::sidDomainJXcoreEnabled);
+    }
+
+    public function JXcoreSupportEnabled()
+    {
+        $sub = $this->getSubscription();
+        if (!$sub) {
+            return null;
+        }
+        return $sub->JXcoreSupportEnabled() && $this->JXcoreSupportEnabled_Value();
     }
 
     public function getAppPort($ssl = false)
@@ -1578,6 +1603,18 @@ class DomainInfo
             StatusMessage::addError("$errMsg the JXcore monitor is not running.");
         } else {
             if ($this->isAppRunning()) return;
+
+            $sub = $this->getSubscription();
+            if (!$sub) {
+                // this will rather not happen
+                StatusMessage::addError("$errMsg No subscription.");
+                return;
+            }
+
+            if (!$sub->JXcoreSupportEnabled()) {
+                StatusMessage::addError("$errMsg JXcore support for the subscription is disabled.");
+                return;
+            }
 
             $cmd = $this->getSpawnerCommand();
             if (!$cmd) {
@@ -1997,6 +2034,7 @@ class SubscriptionInfo {
         $defaults = array();
         $defaults[Modules_JxcoreSupport_Common::sidDomainJXcoreAppAllowSysExec] = 1;
         $defaults[Modules_JxcoreSupport_Common::sidDomainJXcoreAppAllowLocalNativeModules] = 1;
+        $defaults[Modules_JxcoreSupport_Common::sidSubscriptionJXcoreEnabled] = 1;
 
         if (!$wasSet && isset($defaults[$sid]))
             return $defaults[$sid];
@@ -2041,6 +2079,10 @@ class SubscriptionInfo {
         return $ret;
     }
 
+    public function JXcoreSupportEnabled()
+    {
+        return $this->get(Modules_JxcoreSupport_Common::sidSubscriptionJXcoreEnabled);
+    }
 }
 
 
@@ -2066,5 +2108,9 @@ class StatusMessage {
     public static function infoOrError($isError, $infoMsg, $errMsg) {
         if (!self::$status) return;
         self::$status->addMessage($isError ? 'error' : 'info', $isError ? $errMsg : $infoMsg);
+    }
+
+    public static function orange($txt) {
+        return '<span style="color: orangered;">' . $txt . '</span>';
     }
 }

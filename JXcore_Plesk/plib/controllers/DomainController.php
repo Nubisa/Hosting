@@ -50,14 +50,56 @@ class DomainController extends pm_Controller_Action
         $this->view->breadCrumb = 'Navigation: <a href="' . Modules_JxcoreSupport_Common::$urlJXcoreDomains . '">Domains</a> -> ' . $this->domain->name;
     }
 
+    private function check() {
+
+        if (isset($this->view->err))
+            return false;
+
+        $this->view->err = "";
+
+        // user can edit only his own domains
+        if (!Modules_JxcoreSupport_Common::$isAdmin) {
+            $ids = Modules_JxcoreSupport_Common::getDomainsIDsForLoggedClient();
+            if (!in_array($this->ID, $ids))
+                $this->view->err = "Access denied.";
+        }
+
+        if (!$this->domain)
+            $this->view->err = "Access denied.";
+
+        // also if subscription is disabled, nobody can manage the domain, even the admin
+        $sub = $this->domain->getSubscription();
+        if (!$sub)
+            $this->view->err = "Invalid subscription ID";
+
+        // also admin should not go in there
+        if (!$sub->JXcoreSupportEnabled())
+            $this->view->err = "Access denied.";
+
+
+        if ($this->view->err) {
+            $this->view->breadCrumb = "";
+            $this->view->tabs = "";
+            return false;
+        }
+
+        return true;
+    }
+
     public function indexAction()
     {
+        if (!$this->check())
+            return;
+
         $this->_forward('config');
     }
 
 
     public function configAction()
     {
+        if (!$this->check())
+            return;
+
         $json = Modules_JxcoreSupport_Common::getMonitorJSON();
         $monitorRunning = $json !== null;
         $appRunning = $this->domain->isAppRunning();
@@ -66,7 +108,7 @@ class DomainController extends pm_Controller_Action
 
         $form = new pm_Form_Simple();
 
-        $jxEnabled = $this->domain->JXcoreSupportEnabled();
+        $jxEnabled = $this->domain->JXcoreSupportEnabled_Value();
 
         $form->addElement('hidden', Modules_JxcoreSupport_Common::sidDomainJXcoreEnabled, array(
             'value' => "nothing"
@@ -87,7 +129,10 @@ class DomainController extends pm_Controller_Action
             Modules_JxcoreSupport_Common::getButtonStartStop($jxEnabled, Modules_JxcoreSupport_Common::sidDomainJXcoreEnabled, array("Enabled", "Enable"), array("Disabled", "Disable")) :
             Modules_JxcoreSupport_Common::getIcon($jxEnabled, "Enabled", "Disabled");
 
-        $restartButton = $monitorRunning && $jxEnabled ? Modules_JxcoreSupport_Common::getSimpleButton($sidRestart, "Restart application", "restart", "/theme/icons/16/plesk/show-all.png") : "";
+        $restartButton = "";
+        $sub = $this->domain->getSubscription();
+        if ($sub && $sub->JXcoreSupportEnabled())
+            $restartButton = $monitorRunning && $jxEnabled ? Modules_JxcoreSupport_Common::getSimpleButton($sidRestart, "Restart application", "restart", "/theme/icons/16/plesk/show-all.png") : "";
 
         $form->addElement('simpleText', 'status', array(
             'label' => 'JXcore',
@@ -261,6 +306,9 @@ class DomainController extends pm_Controller_Action
 
     public function logAction()
     {
+        if (!$this->check())
+            return;
+
         $form = new pm_Form_Simple();
         $sidClearLog = "clear_log";
         $sidLastLinesCount = "last_lines_count";
@@ -339,6 +387,9 @@ class DomainController extends pm_Controller_Action
 
     public function thirdPartyAction()
     {
+        if (!$this->check())
+            return;
+
         $form = new pm_Form_Simple();
         $sidGhostBlogging = "ghost_blogging";
         $sidLastLinesCount = "last_lines_count";

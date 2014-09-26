@@ -46,7 +46,7 @@ class IndexController extends pm_Controller_Action
     }
 
     /**
-     * When extension is browsed for the first tim in the panel - the navigation goes
+     * When extension is browsed for the first time in the panel - the navigation goes
      * to init page for JXcore installation.
      * Also for pages accessible only for admin - navigation goes to main jx config tab.
      * @param bool $onlyAdminIsAllowed
@@ -172,6 +172,7 @@ class IndexController extends pm_Controller_Action
     }
 
     public function jxcoresiteAction() {
+        if ($this->redirect(true)) return;
         $str = "";
         Modules_JxcoreSupport_Common::getURL("https://nodejx.s3.amazonaws.com/plesk_help.html", $str);
         $this->view->jxcoreSiteContents = $str;
@@ -195,6 +196,7 @@ class IndexController extends pm_Controller_Action
      */
     public function listdomainsDataAction()
     {
+        if ($this->redirect()) return;
         $this->listdomainsAction();
 
         // Json data from pm_View_List_Simple
@@ -464,6 +466,8 @@ class IndexController extends pm_Controller_Action
 
     public function listmodulesDataAction()
     {
+        if ($this->redirect(true)) return;
+
         $this->listmodulesAction();
         $this->_helper->json($this->view->list->fetchData());
         Modules_JxcoreSupport_Common::check();
@@ -570,27 +574,52 @@ class IndexController extends pm_Controller_Action
             $domain->getAppPortOrDefault(true, false);
             $domain->getAppPortOrDefault(true, true);
 
-            $status = $domain->JXcoreSupportEnabled();
+            $status = $domain->JXcoreSupportEnabled_Value();
             if ($status != 1) $status = false; else $status = true;
 
             $baseUrl = pm_Context::getBaseUrl() . 'index.php/domain/';
             $editUrl = $baseUrl . 'config/id/' . $id;
+            $col_count = 8;
 
-            $data[] = array(
-                'column-1' => $id,
-                'column-2' => url($editUrl, $domain->row['displayName']),
-                'column-3' => url($editUrl, $domain->row['cr_date']),
-                'column-4' => Modules_JxcoreSupport_Common::getIcon($status, "Enabled", "Disabled"),
-                'column-5' => $domain->getAppPortStatus(null, false),
-                'column-6' =>  $domain->getAppStatus(),
-                'column-7' => url($editUrl, $domain->sysUser),
-                'column-8' => Modules_JxcoreSupport_Common::getSimpleButton("edit", "Manage", null, null, $editUrl),
-            );
+            if ($sub->JXcoreSupportEnabled()) {
+                $data[] = array(
+                    'column-1' => $id,
+                    'column-2' => url($editUrl, $domain->row['displayName']),
+                    'column-3' => url($editUrl, $domain->row['cr_date']),
+                    'column-4' => Modules_JxcoreSupport_Common::getIcon($status, "Enabled", "Disabled"),
+                    'column-5' => $domain->getAppPortStatus(null, false),
+                    'column-6' =>  $domain->getAppStatus(),
+                    'column-7' => url($editUrl, $domain->sysUser),
+                    'column-8' => Modules_JxcoreSupport_Common::getSimpleButton("edit", "Manage", null, null, $editUrl),
+                );
+            } else {
+                if (Modules_JxcoreSupport_Common::$isAdmin) {
+                    $data[] = array(
+                        'column-1' => $id,
+                        'column-2' => $domain->row['displayName'],
+                        'column-3' => $domain->row['cr_date'],
+                        'column-4' => Modules_JxcoreSupport_Common::getIcon($status, "Enabled", "Disabled"),
+                        'column-5' => $domain->getAppPortStatus(null, false),
+                        'column-6' => $domain->getAppStatus(),
+                        'column-7' => $domain->sysUser,
+                        'column-8' => StatusMessage::orange("Subscription disabled.")
+                    );
+                } else {
+                    $data[] = array(
+                        'column-1' => $id,
+                        'column-2' => $domain->row['displayName'],
+                        'column-3' => $domain->row['cr_date'],
+                        'column-4' => "You have no access to manage the domain. " . StatusMessage::orange("JXcore support for the subscription is disabled.")
+                    );
+                    $col_count = 4;
+                }
+            }
+
         }
 
         $list = new pm_View_List_Simple($this->view, $this->_request);
         $list->setData($data);
-        $columns = array(
+        $_columns = array(
             'column-1' => array(
                 'title' => 'Id',
                 'noEscape' => true,
@@ -625,6 +654,16 @@ class IndexController extends pm_Controller_Action
             ),
         );
 
+        $columns = array();
+        $id = 1;
+        foreach ($_columns as $key=>$arr1) {
+            if ($id > $col_count)
+                break;
+
+            $columns[$key] = $_columns[$key];
+            $id++;
+        }
+
         $list->setColumns($columns);
         $list->setDataUrl(array('action' => 'listdomains-data'));
 
@@ -639,11 +678,48 @@ class IndexController extends pm_Controller_Action
      */
     public function listsubscriptionsAction()
     {
-        if ($this->redirect()) return;
+        if ($this->redirect(true)) return;
+
+
+        $form = new pm_Form_Simple();
+
+
+        $form->addElement('hidden', "subAction", array(
+            'label' => 'Installed modules',
+            'value' => "krowa"
+        ));
+
+
+        if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
+
+            $this->view->status->beforeRedirect = true;
+
+            $do = $this->getRequest()->getParam('subAction');
+            if ($do === "sub-enable" || $do === "sub-disable") {
+
+                $ids = SubscriptionInfo::getIds();
+                foreach($ids as $id) {
+                    $sub = SubscriptionInfo::getSubscription($id);
+                    $sub->set(Modules_JxcoreSupport_Common::sidSubscriptionJXcoreEnabled, $do === "sub-enable" ? 1 : 0);
+                }
+
+                Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded("nowait");
+            }
+
+            $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlJXcoreSubscriptions));
+        }
+
+        $buttons = Modules_JxcoreSupport_Common::getSimpleButton("subAction", "Enable All", "sub-enable", "/theme/icons/16/plesk/start.png", null, "margin-left: 0px", "Are you sure?") .
+                   Modules_JxcoreSupport_Common::getSimpleButton("subAction", "Disable All", "sub-disable", "/theme/icons/16/plesk/stop.png", null, "margin-left: 0px", "Are you sure?");
+
+        $this->view->buttonsDisablingScript = Modules_JxcoreSupport_Common::getButtonsDisablingScript();
+        $this->view->form = $form . $buttons;
+
         $this->view->list = $this->getSubscriptions();
         if ($this->view->list) {
             $this->view->list->setDataUrl(array('action' => 'listsubscriptions-data'));
         }
+
         Modules_JxcoreSupport_Common::check();
     }
 
@@ -652,6 +728,7 @@ class IndexController extends pm_Controller_Action
      */
     public function listsubscriptionsDataAction()
     {
+        if ($this->redirect(true)) return;
         $this->listsubscriptionsAction();
 
         // Json data from pm_View_List_Simple
@@ -701,13 +778,22 @@ class IndexController extends pm_Controller_Action
             $domains = $sub->getDomains();
             $domains_str = "";
             foreach($domains as $d) {
-                $domains_str .=  $d->name . "<br>";
+                $edit_url = "/modules/jxcore-support/index.php/domain/config/id/" . $d->id;
+
+                if (!$sub->JXcoreSupportEnabled())
+                    $domains_str .=  $d->name . "<br>";
+                else
+                    $domains_str .=  url($edit_url, $d->name) . "<br>";
             }
+
+            $status = $sub->JXcoreSupportEnabled();
+            if ($status != 1) $status = false; else $status = true;
 
             $data[] = array(
                 'column-1' => $id,
                 'column-2' => url($editUrl, $sub->mainDomain->row['displayName']),
-                'column-3' => $domains_str,
+                'column-3' => Modules_JxcoreSupport_Common::getIcon($status, "Enabled", "Disabled"),
+                'column-4' => $domains_str,
                 'column-8' => Modules_JxcoreSupport_Common::getSimpleButton("edit", "Manage", null, null, $editUrl),
             );
         }
@@ -724,6 +810,10 @@ class IndexController extends pm_Controller_Action
                 'noEscape' => true,
             ),
             'column-3' => array(
+                'title' => 'JXcore',
+                'noEscape' => true,
+            ),
+            'column-4' => array(
                 'title' => 'Domains',
                 'noEscape' => true,
             ),
