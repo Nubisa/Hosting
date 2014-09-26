@@ -146,9 +146,7 @@ class SubscriptionController extends pm_Controller_Action
 
             StatusMessage::dataSavedOrNot($this->subscription->configChanged);
 
-            if ($monitorRunning && $this->subscription->configChanged) {
-                $this->subscription->updateConfigs();
-            }
+            Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded("nowait");
 
             $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlJXcoreSubscriptions));
         }
