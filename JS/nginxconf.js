@@ -55,7 +55,7 @@ exports.createConfig = function(domain, node_ports, log_location, directives, ss
             var str_config =
                 "server{\n"
                     +"  listen "+ip+":"+sport+ (sport=='443'?' ssl;':';') + '\n'
-                    +"  server_name "+domain+";\n"
+                    +"  server_name www."+domain+" "+domain+";\n"
                     +(sport=='443'?"  ssl on;\n":'')
                     +(sport=='443'?"  ssl_certificate_key " + ssl_info.key + ";\n" : "")
                     +(sport=='443'?"  ssl_certificate " + ssl_info.crt + ";\n" : "")
