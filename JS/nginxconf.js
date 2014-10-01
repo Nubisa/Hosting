@@ -41,7 +41,7 @@ exports.createConfig = function(domain, node_ports, log_location, directives, ss
         sports.push("443");
 
     config_str +=
-        'upstream jxcore_target{\n'
+        'upstream jxcore_target_' + domain + ' {\n'
        +'  server 127.0.0.1:'+ node_ports[0] +';\n'
       // when this was present, changes in domain's config and reloading nginx did not have immediate effect
       // since old connection was still kept
@@ -60,7 +60,7 @@ exports.createConfig = function(domain, node_ports, log_location, directives, ss
                     +(sport=='443'?"  ssl_certificate_key " + ssl_info.key + ";\n" : "")
                     +(sport=='443'?"  ssl_certificate " + ssl_info.crt + ";\n" : "")
                     +"  location / {\n"
-                    +"    proxy_pass http://jxcore_target;\n"
+                    +"    proxy_pass http://jxcore_target_" + domain + ";\n"
                     +"    proxy_read_timeout 9999999;\n"
                     +"    proxy_http_version 1.1;\n"
                     +"    proxy_set_header Upgrade $http_upgrade;\n"
