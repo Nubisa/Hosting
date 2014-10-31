@@ -17,7 +17,7 @@ class Modules_JxcoreSupport_Common
 {
     public static $urlMonitor = "";
     public static $urlMonitorLog = "";
-    public static $urlService = "";
+    public static $urlService = "https://localhost:18999/";
 
     public static $urlJXcoreConfig = "";
     public static $urlJXcoreDomains = "";
@@ -178,7 +178,6 @@ class Modules_JxcoreSupport_Common
         self::$urlJXcoreDomains = $baseUrl . "index.php/index/listdomains";
         self::$urlMonitor = "https://localhost:17777/json?silent=true";
         self::$urlMonitorLog = "https://localhost:17777/logs";
-        self::$urlService = "https://localhost:18999/";
         self::$urlJXcoreConfig = $baseUrl . "index.php/index/jxcore";
         self::$urlJXcoreModules = $baseUrl . "index.php/index/listmodules";
         self::$urlJXcoreSubscriptions = $baseUrl . "index.php/index/listsubscriptions";
@@ -927,7 +926,10 @@ class Modules_JxcoreSupport_Common
         // saving the command to the file (as psaadm)
         $cmd = "{$sid}={$arg}";
         $uid = uniqid();
-        $fname = Modules_JxcoreSupport_Common::$jxpath . "_{$uid}.cmd";
+        // Modules_JxcoreSupport_Common::$jxpath may not be available before calling constructor:
+        // new Modules_JxcoreSupport_Common()
+        $_jxpath = Modules_JxcoreSupport_Common::$jxpath ? Modules_JxcoreSupport_Common::$jxpath : pm_Settings::get(self::sidJXpath);
+        $fname = $_jxpath . "_{$uid}.cmd";
         file_put_contents($fname, $cmd);
 
         // calling te service with file uid

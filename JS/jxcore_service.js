@@ -322,6 +322,42 @@ var srv = https.createServer(options, function (req, res) {
             }
             return;
         }
+
+        if (parsed.query.get_version) {
+
+            if (parsed.query.get_version === "patch") {
+                var getXMLTag = function(tagName, txt, attr) {
+                    var anything = "([\\s\\S]*?)";
+                    if (!attr) attr = ""; else attr = anything + attr + anything ;
+                    var str = "<" + tagName + anything + ">" +anything + "<\\/" + tagName + ">";
+                    var res = new RegExp(str).exec(txt);
+                    return res && res.length > 2 ? res[2].trim() : null;
+                };
+
+                var getXMLAttr = function(attrName, txt) {
+                    var anything = "([\\s\\S]*?)";
+                    var str = attrName + '="' + anything + '"';
+                    var res = new RegExp(str).exec(txt);
+                    return res && res.length > 1 ? res[1].trim() : null;
+                };
+
+                try {
+                    var ret = jxcore.utils.cmdSync('cat /root/.autoinstaller/microupdates.xml');
+                    if (ret.exitCode) {
+                        writeAnswer(ret, "Could not read patch version.");
+                        return;
+                    }
+
+                    var patches = getXMLTag("patches", ret.out);
+                    var plesk = getXMLTag("product", patches, 'id="plesk"');
+                    var ver = getXMLAttr("version", plesk);
+
+                    writeAnswer(res, patches && plesk && ver ? ver : "Could not fetch patch version.");
+                } catch (ex) {
+                    writeAnswer(res, "Could not read patch version. " + ex);
+                }
+            }
+        }
     }
 
     writeAnswer(res);
