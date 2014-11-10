@@ -6,11 +6,11 @@
 
 class Modules_JxcoreSupport_CustomStatus
 {
+    public $beforeRedirect = null;
+
     function Modules_JxcoreSupport_CustomStatus($_helper){
         $this->host = $_helper;
         $this->messageId = 0;
-
-        $this->checkMessages();
     }
 
     function addElement($script){
@@ -97,45 +97,33 @@ class Modules_JxcoreSupport_CustomStatus
     }
 
     public static function CheckStatusRender($_this){
-        $api12 = class_exists(pm_ProductInfo);
+        $api12 = class_exists('pm_ProductInfo');
 
         if (!$api12)
             return false; // version below 12, no need for workaround
 
-        // now there api12
+        // now there is api12
         $ver = pm_ProductInfo::getVersion(); // e.g. 12.0.18
-        $arr = explode(".", $ver);
-        $major = count($arr) > 1 ? $arr[0] : -1; // e.g. 12
 
-        // if version still unknown...
-        if ($major === -1) {
-            // old check method
-            // true means version 12, use workaround
-            // false means version below 12, no need for workaround
-            $class12 = get_class($_this->view->status) != "AdminPanel_Controller_Action_Status";
-            return $class12;
-        }
-
-        if ($major < 12)
-            return false;  // version below 12, no need for workaround
-
-        if ($major == 12) {
-            // should return int number, by reading /root/.autoinstaller/microupdates.xml
-            // gets <patches><product><patch version="xxx .../></product></patches>
-            $str = Modules_JxcoreSupport_Common::callService("get_version", "patch", null, null, true);
-            $patch = is_numeric($str) ? intval($str) : -1;
+        if ($ver == "12.0.18") {
 
             $sid = "last_known_plesk_path_version";
-            if ($patch !== -1) {
-                pm_Settings::set($sid, $patch);
-                // version 12, patch below v8 -  use workaround
-                return $patch < 8;
-            } else {
-                $last = pm_Settings::get($sid);
-                $last = is_numeric($last) ? intval($last) : -1;
+            $last = pm_Settings::get($sid);
+            $last = is_numeric($last) ? intval($last) : -1;
 
-                return $last < 8;
-            }
+            if ($last >= 8)
+                return false;  // plesk 12, patch above v8 - no need for workaround
+
+            // should return int number, by reading /root/.autoinstaller/microupdates.xml
+            // gets <patches><product><patch version="xxx .../></product></patches>
+            $str = Modules_JxcoreSupport_Common::callService("get_version", "patch", null, null, "silent");
+            $patch = is_numeric($str) ? intval($str) : -1;
+
+            if ($patch !== -1)
+                pm_Settings::set($sid, $patch);
+
+            // version 12, patch below v8 -  use workaround
+            return $patch < 8;
         }
 
         return false; // version above 12, let's hope that there's no need for workaround
