@@ -88,8 +88,8 @@ class Modules_JxcoreSupport_Common
     const minApplicationPort_default = 10000;
     const maxApplicationPort_default = 20000;
 
-    public static $minApplicationPort = minApplicationPort_default;
-    public static $maxApplicationPort = maxApplicationPort_default;
+    public static $minApplicationPort = self::minApplicationPort_default;
+    public static $maxApplicationPort = self::maxApplicationPort_default;
 
     private static $hrId = 0;
     private static $controller = null;
@@ -113,6 +113,15 @@ class Modules_JxcoreSupport_Common
         self::$controller = $controller;
         self::$status = $status;
         StatusMessage::$status = $status;
+
+        $_class = get_class($controller);
+        $_clientId = pm_Session::getClient()->getId();
+
+        if ($_class !== 'DomainController')
+            pm_Settings::set("currentDomainId" . $_clientId, "");
+
+        if ($_class !== 'SubscriptionController')
+            pm_Settings::set("currentSubscriptionId" . $_clientId, "");
 
         self::refreshValues();
     }
@@ -423,7 +432,9 @@ class Modules_JxcoreSupport_Common
 
     /**
      * Returns array of ports already taken by JXcore applications assigned to domains
-     * @param $domainId - if this param provided, the result will not contain port of applications for this domain
+     * @param null $domainId - if this param provided, the result will not contain port of applications for this domain
+     * @param null $clientId
+     * @param null $ssl
      * @return array
      */
     public static function getTakenAppPorts($domainId = null, $clientId = null, $ssl = null)
@@ -565,6 +576,9 @@ class Modules_JxcoreSupport_Common
 
             $commands[] = "";
         }
+
+        // reload nginx on batch run
+        $commands[] = "/usr/local/psa/admin/bin/nginx_control -r";
 
         file_put_contents(Modules_JxcoreSupport_Common::$startupBatchPath, join("\n", $commands));
         chmod(Modules_JxcoreSupport_Common::$startupBatchPath, 0700);
@@ -929,6 +943,13 @@ class Modules_JxcoreSupport_Common
         // Modules_JxcoreSupport_Common::$jxpath may not be available before calling constructor:
         // new Modules_JxcoreSupport_Common()
         $_jxpath = Modules_JxcoreSupport_Common::$jxpath ? Modules_JxcoreSupport_Common::$jxpath : pm_Settings::get(self::sidJXpath);
+
+        if (!$_jxpath) {
+            $err = "Cannot connect to JXcore service. Is JXcore installed and monitor running? $sid";
+            if ($return !== "silent") StatusMessage::addError($err);
+            return $err;
+        }
+
         $fname = $_jxpath . "_{$uid}.cmd";
         file_put_contents($fname, $cmd);
 
@@ -940,7 +961,7 @@ class Modules_JxcoreSupport_Common
         $ok = str_replace("\n", "<br>", trim($out)) == "OK";
         $err = $ret ? $out: "Cannot connect to JXcore service.";
         $msg = $ok ? $msgOK : ($msgErr ? "$msgErr $err" : null);
-        if ($msg) {
+        if ($msg && $return !== "silent") {
             $msg = str_replace("#arg#", $arg, $msg);
             $msg = str_replace("#sid#", $sid, $msg);
             self::$status->addMessage($ok ?  "info": "error", $msg);
@@ -1056,6 +1077,7 @@ class DomainInfo
     public static function getFromRow($row) {
         $id = $row['id'];
 
+        $d = null;
         try {
             $d = new pm_Domain($id);
         } catch (Exception $ex) {
@@ -1979,7 +2001,7 @@ class SubscriptionInfo {
             $cfg .= '}';
 
             $fname = $this->jxdir . "jx.config";
-            $old = file_get_contents($fname);
+            $old = file_exists($fname) ? file_get_contents($fname) : null;
 
             if ($old !== $cfg) {
                 $this->invalidate();
