@@ -4,6 +4,7 @@
 
 New:
 — added reload nginx on monitor start
+- removing applications' nginx config files on monitor start. they will be recreated on each app start.
 
 
 Changes:
