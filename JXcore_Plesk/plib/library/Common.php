@@ -553,6 +553,8 @@ class Modules_JxcoreSupport_Common
                 'chmod 640 /etc/nginx/conf.d/jxcore.conf',
                 'fi',
                 '',
+                'rm -rf /etc/nginx/jxcore.conf.d/*.conf',  //config files will be recreated on each app start
+                '',
                 'cd ' . dirname(Modules_JxcoreSupport_Common::$jxpath),
                 './jx monitor start',
                 './jx monitor run ' . Modules_JxcoreSupport_Common::$pathService . " &"
@@ -881,16 +883,17 @@ class Modules_JxcoreSupport_Common
     {
         $cmd = '/usr/local/psa/admin/bin/nginxmng -s 2>&1';
         @exec($cmd, $out, $ret);
+        $str = join("\n", $out);
 
         if (!$ret) {
-            $str = join("\n", $out);
             $enabled = strpos($str, "Enabled") !== false;
             if (!$enabled && $verbose)
                 self::$status->addMessage('warning', "Nginx is not enabled. Status: $str.");
 
             return $enabled;
         } else {
-            self::$status->addMessage("error", "Cannot fetch nginx status. " . join("\n", $out) . ". Exit code: $ret.");
+            $str = self::$isAdmin ? $str . "." : "";
+            self::$status->addMessage("error", "Cannot fetch nginx status.{$str} Exit code: $ret.");
             return false;
         }
     }
@@ -1435,7 +1438,7 @@ class DomainInfo
                 sleep(1);
                 $newSize = filesize($this->appLogPath);
 
-                $ret = $newSize < $oldSize;
+                $ret = $newSize < $oldSize || !$newSize;
             } else {
                 $out = Modules_JxcoreSupport_Common::callService("delete", "applog&path=" .$this->appLogPath, null, null, true);
                 $ret = !file_exists($this->appLogPath);
