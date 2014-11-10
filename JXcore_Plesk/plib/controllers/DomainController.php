@@ -38,16 +38,22 @@ class DomainController extends pm_Controller_Action
         if (!$this->ID) {
             $this->ID = pm_Settings::get("currentDomainId" . pm_Session::getClient()->getId());
 
-            if (!$this->ID) {
-                $this->view->err = "Unknown domain ID";
-                return;
-            }
+            if (!$this->ID)
+                return $this->setError("Unknown domain ID");
+
         } else {
             pm_Settings::set("currentDomainId" . pm_Session::getClient()->getId(), $this->ID);
         }
 
         $this->domain = Modules_JxcoreSupport_Common::getDomain(intval($this->ID));
         $this->view->breadCrumb = 'Navigation: <a href="' . Modules_JxcoreSupport_Common::$urlJXcoreDomains . '">Domains</a> -> ' . $this->domain->name;
+    }
+
+    private function setError($err) {
+        $this->view->err = $err;
+        $this->view->breadCrumb = "";
+        $this->view->tabs = "";
+        return false;
     }
 
     private function check() {
@@ -57,31 +63,27 @@ class DomainController extends pm_Controller_Action
 
         $this->view->err = "";
 
+        if (!Modules_JxcoreSupport_Common::isJXValid())
+            return $this->setError("Access denied. JXcore is not installed.");
+
         // user can edit only his own domains
         if (!Modules_JxcoreSupport_Common::$isAdmin) {
             $ids = Modules_JxcoreSupport_Common::getDomainsIDsForLoggedClient();
             if (!in_array($this->ID, $ids))
-                $this->view->err = "Access denied.";
+                return $this->setError("Access denied.");
         }
 
         if (!$this->domain)
-            $this->view->err = "Access denied.";
+            return $this->setError("Access denied.");
 
         // also if subscription is disabled, nobody can manage the domain, even the admin
         $sub = $this->domain->getSubscription();
         if (!$sub)
-            $this->view->err = "Invalid subscription ID";
+            return $this->setError("Invalid subscription ID.");
 
         // also admin should not go in there
         if (!$sub->JXcoreSupportEnabled())
-            $this->view->err = "Access denied.";
-
-
-        if ($this->view->err) {
-            $this->view->breadCrumb = "";
-            $this->view->tabs = "";
-            return false;
-        }
+            return $this->setError("Access denied.");
 
         return true;
     }

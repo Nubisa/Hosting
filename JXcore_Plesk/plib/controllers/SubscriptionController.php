@@ -28,16 +28,22 @@ class SubscriptionController extends pm_Controller_Action
         if (!$this->ID) {
             $this->ID = pm_Settings::get("currentSubscriptionId" . pm_Session::getClient()->getId() );
 
-            if (!$this->ID) {
-                $this->view->err = "Unknown subscription ID";
-                return;
-            }
+            if (!$this->ID)
+                return $this->setError("Unknown subscription ID");
+
         } else {
             pm_Settings::set("currentSubscriptionId" . pm_Session::getClient()->getId(), $this->ID);
         }
 
         $this->subscription = SubscriptionInfo::getSubscription($this->ID);
         $this->view->breadCrumb = 'Navigation: <a href="' . Modules_JxcoreSupport_Common::$urlJXcoreSubscriptions . '">Subscriptions</a> -> ' . $this->subscription->mainDomain->name;
+    }
+
+    private function setError($err) {
+        $this->view->err = $err;
+        $this->view->breadCrumb = "";
+        $this->view->tabs = "";
+        return false;
     }
 
     private function check() {
@@ -47,17 +53,14 @@ class SubscriptionController extends pm_Controller_Action
 
         $this->view->err = "";
 
+        if (!Modules_JxcoreSupport_Common::isJXValid())
+            return $this->setError("Access denied. JXcore is not installed.");
+
         if (!Modules_JxcoreSupport_Common::$isAdmin)
-            $this->view->err = "Access denied.";
+            return $this->setError("Access denied.");
 
         if (!$this->subscription)
-            $this->view->err = "Access denied.";
-
-        if ($this->view->err) {
-            $this->view->breadCrumb = "";
-            $this->view->tabs = "";
-            return false;
-        }
+            return $this->setError("Access denied.");
 
         return true;
     }

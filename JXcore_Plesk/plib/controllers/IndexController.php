@@ -54,7 +54,7 @@ class IndexController extends pm_Controller_Action
      */
     private function redirect($onlyAdminIsAllowed = false)
     {
-        if (Modules_JxcoreSupport_Common::$firstRun) {
+        if (Modules_JxcoreSupport_Common::$firstRun || !Modules_JxcoreSupport_Common::isJXValid()) {
             $tab = Modules_JxcoreSupport_Common::$isAdmin ? 'init' : 'initNonAdmin';
             $this->_forward($tab);
             return true;
