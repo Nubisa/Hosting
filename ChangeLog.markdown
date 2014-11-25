@@ -1,10 +1,19 @@
 
 
+2.0.4
+
+New:
+* providing command-line args for user's application (domain form)
+
+Changes:
+* improved spawner's error handling and file watcher
+
+
 2.0.3
 
 New:
-— added reload nginx on monitor start
-- removing applications' nginx config files on monitor start. they will be recreated on each app start.
+* added reload nginx on monitor start
+* removing applications' nginx config files on monitor start. they will be recreated on each app start.
 
 
 Changes:
