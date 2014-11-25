@@ -1139,7 +1139,7 @@ class DomainInfo
 
         if ($sid === Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgs) {
             $str = Modules_JxcoreSupport_Common::parseAppArgs($value);
-            pm_Settings::set(Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgsArrayStringified . $this->id, $str ? $str : "");
+            pm_Settings::set(Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgsArrayStringified . $this->id, $str ? $str : "[]");
         }
 
         $changed = $old != $value;
