@@ -161,7 +161,20 @@ class DomainController extends pm_Controller_Action
             'filters' => array('StringTrim'),
             'required' => false,
             'description' => "The path is relative to domain root folder.",
-            'escape' => false
+            'escape' => false,
+            'size' => 80
+        ));
+
+        $validArgs = new MyValid_AppArgs();
+        $form->addElement('text', Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgs, array(
+            'label' => 'Application parameters',
+            'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgs),
+            'validators' => array($validArgs),
+            'filters' => array('StringTrim'),
+            'required' => false,
+            'description' => "Command-line arguments for the application. They will be also visible in `process.argv` property.",
+            'escape' => false,
+            'size' => 80
         ));
 
         if (Modules_JxcoreSupport_Common::$isAdmin) {
@@ -272,6 +285,7 @@ class DomainController extends pm_Controller_Action
 
                     $params = array(
                         Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath,
+                        Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgs,
                         Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess,
                         Modules_JxcoreSupport_Common::sidDomainAppUseSSL,
                         Modules_JxcoreSupport_Common::sidDomainAppSSLCert,
@@ -580,6 +594,35 @@ class MyValid_CertFileName extends Zend_Validate_Abstract
         if (is_dir($fullPath)) {
             $this->cannotContain = $str;
             $this->_error(self::MSG_ISADIR);
+            return false;
+        }
+
+        return true;
+    }
+}
+
+
+class MyValid_AppArgs extends Zend_Validate_Abstract
+{
+    const MSG_ERR = 'msgErr';
+    public $msgErr = "";
+
+    protected $_messageVariables = array(
+        'msgErr' => 'msgErr'
+    );
+
+    protected $_messageTemplates = array(
+        self::MSG_ERR => "Cannot parse application parameters."
+    );
+
+    public function isValid($value)
+    {
+        $value = trim($value);
+        $this->_setValue($value);
+
+        $ret = Modules_JxcoreSupport_Common::parseAppArgs($value);
+        if (!$ret) {
+            $this->_error(self::MSG_ERR);
             return false;
         }
 

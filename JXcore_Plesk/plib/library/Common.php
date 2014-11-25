@@ -61,6 +61,8 @@ class Modules_JxcoreSupport_Common
     const sidDomainJXcoreAppPort = "jx_domain_app_port";
     const sidDomainJXcoreAppPortSSL = "jx_domain_app_port_ssl";
     const sidDomainJXcoreAppPath = "jx_domain_app_path";
+    const sidDomainJXcoreAppArgs = "jx_domain_app_args";
+    const sidDomainJXcoreAppArgsArrayStringified = "jx_domain_app_args_arr_str";
 
     // subscription parameters
     public static $subscriptionParams = null;
@@ -1046,6 +1048,14 @@ class Modules_JxcoreSupport_Common
             self::$status->addMessage('info', "JXcore Monitor successfully stopped.");
         }
     }
+
+    public static function parseAppArgs($str) {
+
+        $cmd = Modules_JxcoreSupport_Common::$jxpath . ' -e "console.log(JSON.stringify(process.argv.slice(1)))" ' . $str;
+        @exec($cmd, $out, $ret);
+
+        return !$ret ? join("", $out) : false;
+    }
 }
 
 
@@ -1066,6 +1076,7 @@ class DomainInfo
 
     private $domain = null;
     private $fileManager = null;
+    private $appLogPathRelative = null;
 
     const appLogBasename = "index.txt";
     const appPath_default = "index.js";
@@ -1096,8 +1107,9 @@ class DomainInfo
         $domain->id = $id;
         $domain->name = $d->getName();
         $domain->rootFolder = $row['www_root'] . "/";
+        $domain->appLogPathRelative = "jxcore_logs/" . self::appLogBasename;
         $domain->appLogDir = $domain->rootFolder . "jxcore_logs/";
-        $domain->appLogPath = $domain->appLogDir . self::appLogBasename;
+        $domain->appLogPath = $domain->rootFolder . $domain->appLogPathRelative;
         $domain->row = $row;
         $domain->webspaceId = $row['webspace_id'];
 
@@ -1125,12 +1137,18 @@ class DomainInfo
         pm_Settings::set($sid . $this->id, $value === null ? "" : $value);
         pm_Settings::set($sid . $this->id . "isset", $value === null ? "false" : "true");
 
+        if ($sid === Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgs) {
+            $str = Modules_JxcoreSupport_Common::parseAppArgs($value);
+            pm_Settings::set(Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgsArrayStringified . $this->id, $str ? $str : "");
+        }
+
         $changed = $old != $value;
         if ($changed) {
             $this->configChanged = true;
             if (in_array($sid,
                     array(
                         Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath,
+                        Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgs,
                         Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess,
                         Modules_JxcoreSupport_Common::sidDomainJXcoreAppPort,
                         Modules_JxcoreSupport_Common::sidDomainJXcoreAppPortSSL,
@@ -1379,26 +1397,38 @@ class DomainInfo
      */
     public function getSpawnerParams($quote = true, $nginxDirectives = null)
     {
-        $additionalParams = array(
+        $strings = array(
             "user" => $this->sysUser,
-            "log" => $this->appLogPath,
-            "file" => $this->getAppPath(true),
+            "home" => $this->rootFolder,
+            "log" => $this->appLogPathRelative,
+            "file" => $this->getAppPath(false),
             "domain" => $this->name,
             "tcp" => $this->getAppPort(),
             "tcps" => $this->getAppPort(true),
             "nginx" => $nginxDirectives ? $nginxDirectives : $this->get(Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives),
-            "logWebAccess" => $this->getAppLogWebAccess());
+            "logWebAccess" => $this->getAppLogWebAccess(),
+            "plesk" => true,
+        );
 
-       if ($this->get(Modules_JxcoreSupport_Common::sidDomainAppUseSSL)) {
-            $additionalParams["ssl_key"] = $this->rootFolder . $this->get(Modules_JxcoreSupport_Common::sidDomainAppSSLKey);
-            $additionalParams["ssl_crt"] = $this->rootFolder . $this->get(Modules_JxcoreSupport_Common::sidDomainAppSSLCert);
+        $nonStrings = array(
+            "args" => $this->get(Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgsArrayStringified)
+        );
+
+        if ($this->get(Modules_JxcoreSupport_Common::sidDomainAppUseSSL)) {
+            $strings["ssl_key"] = $this->rootFolder . $this->get(Modules_JxcoreSupport_Common::sidDomainAppSSLKey);
+            $strings["ssl_crt"] = $this->rootFolder . $this->get(Modules_JxcoreSupport_Common::sidDomainAppSSLCert);
         }
 
         $arr = array();
 
         // as strings
-        foreach ($additionalParams as $key => $val) {
+        foreach ($strings as $key => $val) {
             $arr[] = "\"{$key}\" : \"{$val}\"";
+        }
+
+        // as non-strings
+        foreach ($nonStrings as $key => $val) {
+            $arr[] = "\"{$key}\" : {$val}";
         }
 
         $json = "{ " . join(", ", $arr) . "}";
@@ -1650,14 +1680,13 @@ class DomainInfo
             }
             @exec($cmd, $out, $ret);
 
-            //StatusMessage::addDebug(join("\n",$out));
             Modules_JxcoreSupport_Common::clearMonitorJSON();
 
             if (Modules_JxcoreSupport_Common::$restartFlag !== "nowait") {
                 // waiting for the app to be restarted by monitor
                 // cannot rely on exitcode, so checking the monitor
                 $appRunning = $this->isAppRunning(true);
-                StatusMessage::infoOrError(!$appRunning, "The application {$this->name} successfully started.", "The application {$this->name} could not be started.");
+                StatusMessage::infoOrError(!$appRunning, "The application {$this->name} successfully started.", "The application {$this->name} could not be started. " . join("\n", $out));
             }
 
             $this->configChanged = false;
