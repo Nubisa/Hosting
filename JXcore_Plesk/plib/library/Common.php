@@ -1410,8 +1410,9 @@ class DomainInfo
             "plesk" => true,
         );
 
+        $str = $this->get(Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgsArrayStringified);
         $nonStrings = array(
-            "args" => $this->get(Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgsArrayStringified)
+            "args" => $str ? $str : "[]"
         );
 
         if ($this->get(Modules_JxcoreSupport_Common::sidDomainAppUseSSL)) {
