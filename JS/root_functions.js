@@ -139,6 +139,14 @@ exports.saveNginxConfigFileForDomain = function(options, onlyForTest) {
         ssl_info = { key : options.ssl_key, crt : options.ssl_crt };
     }
 
+    if (options.nginx) {
+        try {
+            options.nginx = new Buffer(options.nginx, 'base64').toString();
+        } catch (ex) {
+            return { err : "Cannot decode base64 nginx options: " + ex };
+        }
+    }
+
     if (fs.existsSync(confDir)) {
         var nginx = require("./nginxconf.js");
         nginx.resetInterfaces();

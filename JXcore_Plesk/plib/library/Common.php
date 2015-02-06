@@ -1405,7 +1405,7 @@ class DomainInfo
             "domain" => $this->name,
             "tcp" => $this->getAppPort(),
             "tcps" => $this->getAppPort(true),
-            "nginx" => $nginxDirectives ? $nginxDirectives : $this->get(Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives),
+            "nginx" => base64_encode($nginxDirectives ? $nginxDirectives : $this->get(Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives)),
             "logWebAccess" => $this->getAppLogWebAccess(),
             "plesk" => true,
         );

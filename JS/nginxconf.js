@@ -28,9 +28,8 @@ exports.createConfig = function(domain, node_ports, log_location, directives, ss
         +"}\n\n";
 
     if (directives) {
-        directives = directives.trim() + ";";
         directives = '  #plan`s directives\n  '
-            + directives.replace(/\n/g, '').replace(/;;/g, ";").replace(/;/g, ';\n    ').trim()
+            + directives.trim().replace(/\n/g, "\n  ").trim()  // just indent
             + "\n";
     } else {
         directives = "";
