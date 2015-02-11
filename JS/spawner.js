@@ -166,6 +166,37 @@ if (!isRoot || !respawned) {
     // ########  saving nginx conf
     if (options.plesk) {
         try {
+            var spawner_data_file = process.argv[1] + ".dat";
+            if (!fs.existsSync(spawner_data_file)) {
+                log("Cannot find spawner data file. Is application disabled in Plesk Panel?", true);
+                process.exit(7);
+            }
+
+            var spawner_data_str = fs.readFileSync(spawner_data_file).toString();
+            var spawner_data = null;
+            try {
+                spawner_data = JSON.parse(spawner_data_str);
+            } catch(ex){
+                log("Cannot parse spawner data file.", true);
+                process.exit(7);
+            }
+
+            if (spawner_data.disabled) {
+                // exiting to prevent dummy process
+                log("Application is disabled in Plesk Panel.");
+                process.exit(7);
+            }
+
+            // nginx directives are no longer provided with argv to the spawner (options variable)
+            // instead they are stored in spawner_xx.jx.dat file (spawner data variable)
+            // however options.nginx contain true, if directives are provided
+
+            if (options.nginx && !spawner_data.nginx) {
+                log("Could not find nginx directives in spawner data.");
+                process.exit(7);
+            }
+
+            options.nginx = spawner_data.nginx;
             var ret = root_functions.saveNginxConfigFileForDomain(options);
             if (ret.err) {
                 log(ret.err, true);
