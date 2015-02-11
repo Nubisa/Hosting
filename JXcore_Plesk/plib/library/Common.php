@@ -567,10 +567,11 @@ class Modules_JxcoreSupport_Common
 
                 $enabled = $domain->JXcoreSupportEnabled();
 
-                $cmd = $domain->getSpawnerCommand();
-                if (!$cmd) continue;
-
                 if ($enabled) {
+
+                    $cmd = $domain->getSpawnerCommand();
+                    if (!$cmd) continue;
+
                     $commands[] = '';
                     $commands[] = "if [ -e {$domain->getSpawnerPath()} ]; then";
                     $commands[] = $cmd;
@@ -933,7 +934,7 @@ class Modules_JxcoreSupport_Common
 
 
     /**
-     * Calls JXcore service process for running a command as root
+     * Calls JXcore service process for running a command as root by passing args in form of GET url
      * @param $sid
      * @param $arg
      * @param string $msgOK
@@ -956,7 +957,12 @@ class Modules_JxcoreSupport_Common
         }
 
         $fname = $_jxpath . "_{$uid}.cmd";
-        file_put_contents($fname, $cmd);
+
+        if (is_array($sid)) {
+            file_put_contents($fname, json_encode($sid));
+        } else{
+            file_put_contents($fname, $cmd);
+        }
 
         // calling te service with file uid
         $url = Modules_JxcoreSupport_Common::$urlService . "cmd?cuid=$uid";
@@ -1378,25 +1384,37 @@ class DomainInfo
         $spawnerOrg = Modules_JxcoreSupport_Common::$pathSpawner;
         chmod($spawnerOrg, 0644);
         $spawner = pm_Context::getVarDir() . "spawner_{$this->id}.jx";
-        if (copy($spawnerOrg, $spawner) === false) {
-            StatusMessage::addError("Cannot copy spawner for application of domain {$this->name}.");
-            return false;
-        }
-        if (chmod($spawner, 0644) === false) {
-            StatusMessage::addError("Cannot set permissions for application's spawner of domain {$this->name}.");
-            return false;
+
+        if ($this->JXcoreSupportEnabled()) {
+            if (copy($spawnerOrg, $spawner) === false) {
+                StatusMessage::addError("Cannot copy spawner for application of domain {$this->name}.");
+                return false;
+            }
+            if (chmod($spawner, 0644) === false) {
+                StatusMessage::addError("Cannot set permissions for application's spawner of domain {$this->name}.");
+                return false;
+            }
         }
 
         return $spawner;
     }
 
-    /**
-     * Returns parameters for spawner command line (log, user, appFile)
-     * @param $additionalParams
-     * @return string
-     */
-    public function getSpawnerParams($quote = true, $nginxDirectives = null)
+    public function getSpawnerDataPath()
     {
+        $spawner = $this->getSpawnerPath();
+        if ($spawner === false)
+            return null;
+        return $spawner . ".dat";
+    }
+    /**
+     * Returns parameters for spawner command line (log, user, appFile) as array
+     * @param $additionalParams
+     * @return array
+     */
+    public function getSpawnerParams()
+    {
+        $args = $this->get(Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgsArrayStringified);
+
         $strings = array(
             "user" => $this->sysUser,
             "home" => $this->rootFolder,
@@ -1405,14 +1423,9 @@ class DomainInfo
             "domain" => $this->name,
             "tcp" => $this->getAppPort(),
             "tcps" => $this->getAppPort(true),
-            "nginx" => base64_encode($nginxDirectives ? $nginxDirectives : $this->get(Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives)),
             "logWebAccess" => $this->getAppLogWebAccess(),
-            "plesk" => true,
-        );
-
-        $str = $this->get(Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgsArrayStringified);
-        $nonStrings = array(
-            "args" => $str ? $str : "[]"
+            "args" => $args ? json_decode($args) : array(),
+            "plesk" => true
         );
 
         if ($this->get(Modules_JxcoreSupport_Common::sidDomainAppUseSSL)) {
@@ -1420,23 +1433,7 @@ class DomainInfo
             $strings["ssl_crt"] = $this->rootFolder . $this->get(Modules_JxcoreSupport_Common::sidDomainAppSSLCert);
         }
 
-        $arr = array();
-
-        // as strings
-        foreach ($strings as $key => $val) {
-            $arr[] = "\"{$key}\" : \"{$val}\"";
-        }
-
-        // as non-strings
-        foreach ($nonStrings as $key => $val) {
-            $arr[] = "\"{$key}\" : {$val}";
-        }
-
-        $json = "{ " . join(", ", $arr) . "}";
-        if ($quote)
-            $json = "'" . $json . "'";
-
-        return $json;
+        return $strings;
     }
 
     /**
@@ -1449,9 +1446,34 @@ class DomainInfo
 
         $spawner = $this->getSpawnerPath();
         if ($spawner === false) return null;
+        $spawner_data_file = $this->getSpawnerDataPath();
 
-        $opt = $this->getSpawnerParams();
-        return $sub->jxpath . " {$spawner} -opt {$opt}";
+        // we will compare previous nginx directives with current
+        $nginx_directives = $this->get(Modules_JxcoreSupport_Common::sidDomainAppNginxDirectives);
+
+        $arr = $this->getSpawnerParams();
+        // argv for the spawner will not contain nginx directives any more - will contain just the bool flag,
+        // that nginx directives are defined
+        if ($nginx_directives)
+            $arr["nginx"] = true;
+
+        $spawner_args = json_encode($arr);
+
+        if ($this->JXcoreSupportEnabled()) {
+            $arr["nginx"] = $nginx_directives;
+
+            $data_new = json_encode($arr, 128);
+            $data_old = "";
+            if (file_exists($spawner_data_file))
+                $data_old = file_get_contents($spawner_data_file);
+
+            if ($data_old != $data_new) {
+                //StatusMessage::addDebug("spawner_data_file save request for {$this->name}. From file: >{$data_old}<, From form: >{$data_new}<");
+                file_put_contents($spawner_data_file, $data_new);
+            }
+        }
+
+        return $sub->jxpath . " {$spawner} -opt '{$spawner_args}'";
     }
 
     public function clearLogFile()
@@ -1521,8 +1543,8 @@ class DomainInfo
                     $this->startApp();
                 }
             } else {
-                // removing nginx conf for the domain
-                Modules_JxcoreSupport_Common::callService("nginx", "remove&domain=" . $this->name, null, null);
+                // app was disabled from panel
+                $this->clearFiles();
                 if ($running) {
                     $this->stopApp();
                 } else {
@@ -1730,6 +1752,36 @@ class DomainInfo
               }
             $this->configChanged = false;
         }
+    }
+
+    /**
+     * Calls JXcore service process for running a command as root by passing an array to be easily stringified to json
+     * @param $name
+     * @param $val
+     * @param $arg
+     * @param null $msgOK
+     * @param null $msgErr
+     * @param null $return
+     * @return bool
+     */
+    public function callService($cmd, $arg, $msgOK = null, $msgErr = null, $return = null) {
+        $arr = array();
+        $arr["cmd"] = $cmd;
+        $arr["arg"] = $arg;
+        $arr["spawner_args"] = $this->getSpawnerParams();
+        return Modules_JxcoreSupport_Common::callService($arr, null, $msgOK, $msgErr, $return);
+    }
+
+    private function clearFiles() {
+        // removing nginx conf for the domain
+        Modules_JxcoreSupport_Common::callService("nginx", "remove&domain=" . $this->name, null, null);
+
+        $spawner = $this->getSpawnerPath();
+        if ($spawner === false) return null;
+        $spawner_data_file = $this->getSpawnerDataPath();
+
+        if (file_exists($spawner)) unlink($spawner);
+        if (file_exists($spawner_data_file)) unlink($spawner_data_file);
     }
 }
 
