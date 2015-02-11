@@ -383,7 +383,12 @@ class IndexController extends pm_Controller_Action
                 $installAction = in_array($req->getParam($sidJXcore), array("install", "uninstall"));
 
                 if ($monitorAction) {
-                    Modules_JxcoreSupport_Common::monitorStartStop($req->getParam($sidMonitor));
+                    $monitorActionValue = $req->getParam($sidMonitor);
+                    if ($monitorActionValue === "start") {
+                        Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded("norestart");
+                    }
+                    Modules_JxcoreSupport_Common::monitorStartStop($monitorActionValue);
+                    Modules_JxcoreSupport_Common::reloadNginx();
                 } else if ($installAction) {
                     $this->JXcoreInstallUninstall($req->getParam($sidJXcore));
                 } else {
