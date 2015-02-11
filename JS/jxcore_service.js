@@ -98,8 +98,24 @@ var srv = https.createServer(options, function (req, res) {
 
 
         // adding http just for being able to parse the command
-        var str = "http://127.0.0.1:/cmd?" + fs.readFileSync(fname).toString().trim();
-        var parsed = url.parse(str, true);
+        var fstr = fs.readFileSync(fname).toString('utf8').trim();
+        if (fstr.slice(0,1) == "{") {
+            // new way with params as json saved in file
+            try {
+                var parsed = JSON.parse(fstr);
+                // for old compatibility:
+                parsed.query = {};
+            } catch (ex) {
+                writeAnswer("Cannot parse json command: " + ex.toString());
+                return;
+            }
+        } else {
+            // old way with GET url saved in file
+            var str = "http://127.0.0.1:/cmd?" + fstr;
+            var parsed = url.parse(str, true);
+        }
+
+//        fs.writeFileSync("/tmp/parsed.txt", JSON.stringify(parsed, null, 4));
         fs.unlinkSync(fname);
 
         if (parsed.query.install) {
@@ -194,7 +210,7 @@ var srv = https.createServer(options, function (req, res) {
             var answer = "Unknown command.";
             if (parsed.query.nginx == "remove") {
 
-                var dir = "/etc/nginx/jxcore.conf.d"
+                var dir = "/etc/nginx/jxcore.conf.d";
 
                 if (parsed.query.domain) {
                     var fname = path.join(dir, "/", parsed.query.domain + ".conf");
@@ -207,7 +223,7 @@ var srv = https.createServer(options, function (req, res) {
 
                         answer = fs.existsSync(fname) ? "Could not remove nginx config for the application." : "OK";
                     } else {
-                        answer = "File does not exist."
+                        answer = "Nginx config file for the domain does not exist.";
                     }
 
                 } else if (parsed.query.all && parsed.query.all == 1) {
@@ -216,22 +232,6 @@ var srv = https.createServer(options, function (req, res) {
                     jxcore.utils.cmdSync(cmd);
 
                     answer = fs.existsSync(fname) || fs.existsSync(dir) ? "Could not remove nginx configs." : "OK";
-                }
-            }
-
-            if (parsed.query.nginx == "test") {
-                if (parsed.query.opt) {
-
-                    try {
-                        var options = JSON.parse(parsed.query.opt);
-                    } catch (ex) {
-                        answer = "Cannot parse options: " + ex;
-                    }
-
-                    if (options) {
-                        var ret = root_functions.saveNginxConfigFileForDomain(options, true);
-                        answer = ret.err || "OK";
-                    }
                 }
             }
 
@@ -356,8 +356,26 @@ var srv = https.createServer(options, function (req, res) {
                 } catch (ex) {
                     writeAnswer(res, "Could not read patch version. " + ex);
                 }
+                return;
             }
         }
+
+        // new way of passing arrays - as parsable json:
+        if (parsed.cmd == "nginx-test") {
+
+            if (!parsed.spawner_args) {
+                writeAnswer(rec, "Spawner args not provided to callService method.");
+                return;
+            }
+
+            var options = parsed.spawner_args; // this is a json object
+            options.nginx = parsed.arg;  // nginx directives to be tested. may be empty as well
+            var ret = root_functions.saveNginxConfigFileForDomain(options, true);
+
+            writeAnswer(res, ret.err || "OK");
+            return;
+        }
+
     }
 
     writeAnswer(res);
