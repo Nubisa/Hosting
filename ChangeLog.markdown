@@ -1,4 +1,10 @@
 
+2.0.5
+
+Changes:
+* fix for submitting multiline nginx directives (domain form)
+* nginx config files for domains do not use upstream any more
+* improved monitor management of crashed applications
 
 2.0.4
 
