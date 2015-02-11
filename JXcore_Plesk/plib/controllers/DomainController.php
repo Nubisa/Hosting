@@ -521,8 +521,7 @@ class MyValid_NginxDirectives extends Zend_Validate_Abstract
 
         $this->_setValue($value);
 
-        $opt = $this->domain->getSpawnerParams(false, $value);
-        $ret = Modules_JxcoreSupport_Common::callService("nginx", "test&opt=" . $opt, null, null, true);
+        $ret = $this->domain->callService("nginx-test", $value, null, null, true);
 
         if ($ret !== "OK") {
             $this->msgErr = html_entity_decode($ret);
