@@ -96,8 +96,6 @@ var srv = https.createServer(options, function (req, res) {
 //        }
 
 
-
-        // adding http just for being able to parse the command
         var fstr = fs.readFileSync(fname).toString('utf8').trim();
         if (fstr.slice(0,1) == "{") {
             // new way with params as json saved in file
@@ -106,11 +104,12 @@ var srv = https.createServer(options, function (req, res) {
                 // for old compatibility:
                 parsed.query = {};
             } catch (ex) {
-                writeAnswer("Cannot parse json command: " + ex.toString());
+                writeAnswer(res, "Cannot parse json command: " + ex.toString());
                 return;
             }
         } else {
             // old way with GET url saved in file
+            // adding http just for being able to parse the command
             var str = "http://127.0.0.1:/cmd?" + fstr;
             var parsed = url.parse(str, true);
         }
@@ -217,11 +216,10 @@ var srv = https.createServer(options, function (req, res) {
                     if (fs.existsSync(fname)) {
                         try {
                             fs.unlinkSync(fname);
+                            answer = fs.existsSync(fname) ? "Could not remove nginx config for the application." : "OK";
                         } catch (ex) {
                             answer = "Cannot remove config for the application." + ex;
                         }
-
-                        answer = fs.existsSync(fname) ? "Could not remove nginx config for the application." : "OK";
                     } else {
                         answer = "Nginx config file for the domain does not exist.";
                     }
@@ -364,7 +362,7 @@ var srv = https.createServer(options, function (req, res) {
         if (parsed.cmd == "nginx-test") {
 
             if (!parsed.spawner_args) {
-                writeAnswer(rec, "Spawner args not provided to callService method.");
+                writeAnswer(res, "Spawner args not provided to callService method.");
                 return;
             }
 

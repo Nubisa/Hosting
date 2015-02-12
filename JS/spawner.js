@@ -183,12 +183,14 @@ if (!isRoot || !respawned) {
 
             if (spawner_data.disabled) {
                 // exiting to prevent dummy process
+                // however probably this condition will newer be fired, since for disabled apps
+                // we remove spawner fire and spawner data file, so it will end up much sooner
                 log("Application is disabled in Plesk Panel.");
                 process.exit(7);
             }
 
             // nginx directives are no longer provided with argv to the spawner (options variable)
-            // instead they are stored in spawner_xx.jx.dat file (spawner data variable)
+            // instead they are stored in spawner_xx.jx.dat file (spawner_data variable)
             // however options.nginx contain true, if directives are provided
 
             if (options.nginx && !spawner_data.nginx) {

@@ -1376,7 +1376,7 @@ class DomainInfo
     }
 
     /**
-     * Copies spawner file for domain, sets it's permissions and returns full parh (or false on error)
+     * Copies spawner file for domain, sets it's permissions and returns full path (or false on error)
      * @return bool|string
      */
     public function getSpawnerPath()
@@ -1462,7 +1462,7 @@ class DomainInfo
         if ($this->JXcoreSupportEnabled()) {
             $arr["nginx"] = $nginx_directives;
 
-            $data_new = json_encode($arr, 128);
+            $data_new = json_encode($arr, 128);  // 128 stands for pretty print
             $data_old = "";
             if (file_exists($spawner_data_file))
                 $data_old = file_get_contents($spawner_data_file);
@@ -1543,13 +1543,13 @@ class DomainInfo
                     $this->startApp();
                 }
             } else {
-                // app was disabled from panel
-                $this->clearFiles();
+                // this occurs when app was disabled from panel
                 if ($running) {
                     $this->stopApp();
                 } else {
                     // do nothing
                 }
+                $this->clearFiles();
             }
         }
     }
@@ -1756,8 +1756,7 @@ class DomainInfo
 
     /**
      * Calls JXcore service process for running a command as root by passing an array to be easily stringified to json
-     * @param $name
-     * @param $val
+     * @param $cmd
      * @param $arg
      * @param null $msgOK
      * @param null $msgErr
