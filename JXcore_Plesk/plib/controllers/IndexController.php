@@ -402,6 +402,9 @@ class IndexController extends pm_Controller_Action
 
                     if ($portsChanged) Modules_JxcoreSupport_Common::reassignPorts();
                     Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded("nowait");
+                    // nginx IS reloaded (in updateAllConfigsIfNeeded()),
+                    // but somehow without the second call is not catching the changes of port range...
+                    if ($portsChanged) Modules_JxcoreSupport_Common::reloadNginx(true);
 
                     $this->_status->addMessage('info', 'Data was successfully saved.');
                 }

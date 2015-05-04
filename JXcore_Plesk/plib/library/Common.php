@@ -921,9 +921,9 @@ class Modules_JxcoreSupport_Common
         }
     }
 
-    public static function reloadNginx() {
+    public static function reloadNginx($force = null) {
 
-        if (self::checkNginx(false) && !self::$nginxReloaded) {
+        if (self::checkNginx(false) && (!self::$nginxReloaded || $force)) {
             $cmd = "/usr/local/psa/admin/bin/nginx_control -r";
             @exec($cmd, $out, $ret);
 
