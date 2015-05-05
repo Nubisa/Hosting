@@ -1207,7 +1207,7 @@ class DomainInfo
 
 
     /**
-     * Asks the monitor if the app si running
+     * Asks the monitor if the app is running
      * @param null $wait - if true, then checking is done in short loop
      * @return bool
      */
@@ -2220,5 +2220,63 @@ class StatusMessage {
 
     public static function orange($txt) {
         return '<span style="color: orangered;">' . $txt . '</span>';
+    }
+}
+
+
+class JXcoreLatestVersionInfo {
+
+    // url to S3 folder
+    public $url = null;
+    // version of JXcore in S3 folder
+    public $version = null;
+    // true, if there is already latest version installed
+    public $isLatest = null;
+    // true, if current version is lower than the newest
+    public $isUpdateAvailable = null;
+    public $mustUpdate = null;
+    public $error = null;
+
+    // e.g. 0.2.3.7
+    private $localNumber = null;
+    // e.g. 0.3.0.0
+    private $remoteNumber = null;
+
+    function JXcoreLatestVersionInfo($showError = false){
+        $output = "";
+        $ret = Modules_JxcoreSupport_Common::getURL("https://jxcore.s3.amazonaws.com/latest.txt", $output);
+        $arr = explode("|", $output);
+        if (!$ret || count($arr) < 2) {
+            $this->status = "Could not fetch the latest version number: " . $output;
+            $this->error = true;
+            if ($showError)
+                StatusMessage::addError($this->error);
+            return;
+        }
+
+        $this->url = trim($arr[0]);
+        if (substr($this->url, -1) !== "/")
+            $this->url .= "/";
+        $this->version = trim($arr[1]);
+
+        if (!Modules_JxcoreSupport_Common::$jxv)
+            return;
+
+        $remove = array("v ", "Beta-");
+        $this->localNumber = trim(str_replace( $remove, "", Modules_JxcoreSupport_Common::$jxv));
+        $this->remoteNumber = trim(str_replace($remove, "", $this->version));
+
+        $this->isLatest = $this->remoteNumber === $this->localNumber;
+        $this->isUpdateAvailable = $this->remoteNumber > $this->localNumber;
+        $this->mustUpdate = $this->remoteNumber > $this->localNumber && $this->localNumber <= "0.3.0.0";
+
+        if ($this->isLatest)
+            $this->status = "This is the latest.";
+
+        if ($this->isUpdateAvailable)
+            $this->status = "Update to " . $arr[1];
+
+        if ($this->mustUpdate)
+            $this->status = "Please, you must update JXcore to {$this->version}.";
     }
 }

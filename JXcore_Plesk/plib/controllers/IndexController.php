@@ -269,6 +269,9 @@ class IndexController extends pm_Controller_Action
 
         if (Modules_JxcoreSupport_Common::$isAdmin) {
 
+            $newVersion = new JXcoreLatestVersionInfo(false);
+            $latest = $newVersion->isLatest ? '. <span class="hint" style="display: inline-block;">' . $newVersion->status . '</span>' : "";
+
             // JXcore install uninstall
             $form->addElement('hidden', $sidJXcore, array(
                 'value' => 'nothing',
@@ -277,7 +280,7 @@ class IndexController extends pm_Controller_Action
             $form->addElement('simpleText', 'jxversion', array(
                 'label' => 'JXcore version',
                 'escape' => false,
-                'value' => Modules_JxcoreSupport_Common::getIcon(Modules_JxcoreSupport_Common::$jxv, "Installed " . Modules_JxcoreSupport_Common::$jxv, 'Not installed')
+                'value' => Modules_JxcoreSupport_Common::getIcon(Modules_JxcoreSupport_Common::$jxv, "Installed <b>" . trim(Modules_JxcoreSupport_Common::$jxv) . "</b>". $latest, 'Not installed')
             ));
 
             if (Modules_JxcoreSupport_Common::$jxv) {
@@ -289,7 +292,10 @@ class IndexController extends pm_Controller_Action
             }
 
             if (Modules_JxcoreSupport_Common::$jxv) {
-                $buttons = Modules_JxcoreSupport_Common::getSimpleButton($sidJXcore, 'Reinstall', "install", "/theme/icons/16/plesk/show-all.png", null, "margin-left: 0;");
+                $caption = 'Reinstall';
+                if (!$newVersion->error && $newVersion->isUpdateAvailable)
+                    $caption = $newVersion->status;
+                $buttons = Modules_JxcoreSupport_Common::getSimpleButton($sidJXcore, $caption , "install", "/theme/icons/16/plesk/show-all.png", null, "margin-left: 0;");
             } else {
                 $buttons = Modules_JxcoreSupport_Common::getSimpleButton($sidJXcore, 'Install', "install", "/theme/icons/16/plesk/upload-files.png", null, "margin-left: 0;");
             }
@@ -313,17 +319,10 @@ class IndexController extends pm_Controller_Action
                     'value' => 'nothing',
                 ));
 
-//                $cronAction = pm_Settings::get(Common::sidMonitorStartScheduledByCronAction);
-//                $ret = Common::checkCronScheduleStatus(false);
-//                if ($ret && $ret > 0) {
-//                    if ($cronAction == "start")
-//                        $btn = Common::getIcon($monitorRunning, "Online", "Offline") . "<div> Monitor is scheduled to be launched in $ret seconds.</div>";
-//                    else  if ($cronAction == "stop")
-//                         $btn = Common::getIcon($monitorRunning, "Online", "Offline") . "<div> Monitor is scheduled to be stopped in $ret seconds.</div>";
-//                } else {
-                    $btn = Modules_JxcoreSupport_Common::getButtonStartStop($monitorRunning, $sidMonitor, array("Online", "Start"), array("Offline", "Stop"));
-//                }
-
+                $btn = Modules_JxcoreSupport_Common::getButtonStartStop($monitorRunning, $sidMonitor, array("Online", "Start"), array("Offline", "Stop"));
+                if (!$monitorRunning && $newVersion->mustUpdate)
+                    $btn = Modules_JxcoreSupport_Common::getIcon($monitorRunning, "non-important", "Offline", "display: inline-block; min-width: 80px;") .
+                        '<span style="color: red;">You cannot start the monitor right now. ' . $newVersion->status . '</span>';
 
                 $form->addElement('simpleText', 'status', array(
                     'label' => 'JXcore Monitor status',
@@ -840,7 +839,16 @@ class IndexController extends pm_Controller_Action
 
     public function download_JXcore(&$output)
     {
-        $downloadURL = "https://s3.amazonaws.com/nodejx/";
+        // this was for 2.3.7
+        // $downloadURL = "https://s3.amazonaws.com/nodejx/";
+
+        $newVersion = new JXcoreLatestVersionInfo();
+        if ($newVersion->error) {
+            $output = $newVersion->status;
+            return false;
+        }
+
+        $downloadURL = $newVersion->url;
 
         // 32 or 64
         $arch = PHP_INT_SIZE * 8;
@@ -876,25 +884,20 @@ class IndexController extends pm_Controller_Action
 
 
         if ($platform !== null) {
-//            if($platform == "suse")
-//                $basename = "jx_suse32.zip";
-//            else
-                $basename = "jx_{$platform}{$arch}";
-
-//            if($arch ."" == "32" && $platform == "deb")
-//                $basename = "jx_ub32.zip";
+            $basename = "jx_{$platform}{$arch}v8";
 
             $url = $downloadURL . $basename . ".zip";
             $tmpdir = pm_Context::getVarDir();
             $zip = $tmpdir . $basename . ".zip";
-            $unzippedDir = "{$tmpdir}jx_{$platform}{$arch}/";
+            $unzippedDir237 = "{$tmpdir}jx_{$platform}{$arch}/";
+            $unzippedDir = "{$tmpdir}{$basename}/";
             $unzippedJX = "{$unzippedDir}jx";
 
             if (true /*!file_exists($unzipped_jx)*/) {
 
                 $file = fopen($url, 'r');
                 if (!$file) {
-                    $output = 'Cannot download file {$file}.';
+                    $output = "Cannot download file {$url}: " . join("<br>", error_get_last()) ;
                     return false;
                 } else {
                     if (file_put_contents($zip, $file) === false) {
@@ -902,10 +905,8 @@ class IndexController extends pm_Controller_Action
                         $output = 'Cannot save downloaded file {$file} into {$zip}.';
                         return false;
                     } else {
-//                        exec("rm -rf $unzippedDir");
                         Modules_JxcoreSupport_Common::rmdir($unzippedDir);
                         Modules_JxcoreSupport_Common::rmdir(Modules_JxcoreSupport_Common::$dirSubscriptionConfigs);
-                        //unlink($unzippedJX);
 
                         $zipObj = new ZipArchive();
                         $res = $zipObj->open($zip);
@@ -921,6 +922,7 @@ class IndexController extends pm_Controller_Action
                             chmod($unzippedJX, 0555);
                             @unlink($zip);
                         } else {
+                            Modules_JxcoreSupport_Common::rmdir($unzippedDir237);
                             $output = "Could not open JXcore downloaded package: {$zip}.";
                             return false;
                         }
