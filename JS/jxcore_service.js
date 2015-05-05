@@ -9,6 +9,7 @@ var https = require("https");
 var http = require("http");
 var url = require("url");
 var root_functions = require("./root_functions.js");
+require("./nginxWatch.js");
 
 var jxconfig = root_functions.readJXconfig();
 
