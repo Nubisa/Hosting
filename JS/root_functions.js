@@ -144,6 +144,7 @@ exports.saveNginxConfigFileForDomain = function(options, onlyForTest) {
         nginx.resetInterfaces();
         var logWebAccess = options.logWebAccess == 1 || options.logWebAccess == "true";
         var conf = nginx.createConfig(options.domain, [ options.tcp, options.tcps], logWebAccess ? path.dirname(options.log) : null, options.nginx, ssl_info);
+        conf = conf.replace(/JX_ROOT/g, options.home);
 
         if (onlyForTest) {
             conf = "events {} http { \n" + conf + "\n}";

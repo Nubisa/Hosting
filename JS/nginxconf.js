@@ -53,6 +53,7 @@ exports.createConfig = function(domain, node_ports, log_location, directives, ss
             var ip = ifc_list[o];
             var str_config =
                 "server{\n"
+                    +"  root JX_ROOT;" + '\n'
                     +"  listen "+ip+":"+sport+ (sport=='443'?' ssl;':';') + '\n'
                     +"  server_name www."+domain+" "+domain+";\n"
                     +(sport=='443'?"  ssl on;\n":'')
@@ -65,12 +66,18 @@ exports.createConfig = function(domain, node_ports, log_location, directives, ss
                     +"    proxy_http_version 1.1;\n"
                     +"    proxy_set_header Upgrade $http_upgrade;\n"
                     +"    proxy_set_header Connection \"Upgrade\";\n"
-                    +"  }\n"
+                    +"  }\n";
+
+            if (log_location) {
+                str_config += ""
                     +"  location /jxcore_logs {\n"
                     +"    autoindex on;\n"
-                    +"    alias "+log_location+";\n"
+                    +"    index index.txt;\n"
                     +"    add_header Content-type text/plain;\n"
-                    +"  }\n"
+                    +"  }\n";
+            }
+
+            str_config += ""
                     +directives
                     +"}\n";
 
