@@ -270,7 +270,7 @@ class IndexController extends pm_Controller_Action
         if (Modules_JxcoreSupport_Common::$isAdmin) {
 
             $newVersion = new JXcoreLatestVersionInfo(false);
-            $latest = $newVersion->isLatest ? '. <span class="hint" style="display: inline-block;">' . $newVersion->status . '</span>' : "";
+            $latest = $newVersion->isLatest || $newVersion->isUpdateAvailable ? '. <span class="hint" style="display: inline-block;">' . $newVersion->status . '</span>' : "";
 
             // JXcore install uninstall
             $form->addElement('hidden', $sidJXcore, array(
@@ -294,7 +294,7 @@ class IndexController extends pm_Controller_Action
             if (Modules_JxcoreSupport_Common::$jxv) {
                 $caption = 'Reinstall';
                 if (!$newVersion->error && $newVersion->isUpdateAvailable)
-                    $caption = $newVersion->status;
+                    $caption = "Update to " . $newVersion->version;
                 $buttons = Modules_JxcoreSupport_Common::getSimpleButton($sidJXcore, $caption , "install", "/theme/icons/16/plesk/show-all.png", null, "margin-left: 0;");
             } else {
                 $buttons = Modules_JxcoreSupport_Common::getSimpleButton($sidJXcore, 'Install', "install", "/theme/icons/16/plesk/upload-files.png", null, "margin-left: 0;");

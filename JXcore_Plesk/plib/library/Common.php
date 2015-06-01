@@ -925,7 +925,7 @@ class Modules_JxcoreSupport_Common
 
         if (self::checkNginx(false) && (!self::$nginxReloaded || $force)) {
             $cmd = "/usr/local/psa/admin/bin/nginx_control -r";
-            @exec($cmd, $out, $ret);
+//            @exec($cmd, $out, $ret);
 
 //            StatusMessage::infoOrError($ret, "Nginx reloaded successfully.", "Cannot reload nginx. " . join("\n", $out) . ". Exit code: $ret." );
             self::$nginxReloaded = true;
@@ -2236,6 +2236,8 @@ class JXcoreLatestVersionInfo {
     public $isUpdateAvailable = null;
     public $mustUpdate = null;
     public $error = null;
+    // update info displayed on JXcore Configuration tab (next tu JXcore Version)
+    public $status = null;
 
     // e.g. 0.2.3.7
     private $localNumber = null;
@@ -2268,13 +2270,13 @@ class JXcoreLatestVersionInfo {
 
         $this->isLatest = $this->remoteNumber === $this->localNumber;
         $this->isUpdateAvailable = $this->remoteNumber > $this->localNumber;
-        $this->mustUpdate = $this->remoteNumber > $this->localNumber && $this->localNumber <= "0.3.0.0";
+        $this->mustUpdate = $this->remoteNumber > $this->localNumber && $this->localNumber < "0.3.0.0";
 
         if ($this->isLatest)
             $this->status = "This is the latest.";
 
         if ($this->isUpdateAvailable)
-            $this->status = "Update to " . $arr[1];
+            $this->status = "New version is available: " . $arr[1];
 
         if ($this->mustUpdate)
             $this->status = "Please, you must update JXcore to {$this->version}.";
