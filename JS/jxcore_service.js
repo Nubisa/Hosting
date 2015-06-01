@@ -9,7 +9,6 @@ var https = require("https");
 var http = require("http");
 var url = require("url");
 var root_functions = require("./root_functions.js");
-require("./nginxWatch.js");
 
 var jxconfig = root_functions.readJXconfig();
 
@@ -390,3 +389,9 @@ srv.on("listening", function () {
 
 srv.listen(18999, "127.0.0.1");
 
+
+try {
+    require("./nginxWatch.js");
+} catch (ex) {
+
+}
