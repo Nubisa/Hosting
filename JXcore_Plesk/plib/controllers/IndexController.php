@@ -887,7 +887,11 @@ class IndexController extends pm_Controller_Action
             $basename = "jx_{$platform}{$arch}v8";
 
             $url = $downloadURL . $basename . ".zip";
+
+            // /opt/psa/var/modules/jxcore-support/ or
+            // /usr/local/psa/var/modules/jxcore-support/
             $tmpdir = pm_Context::getVarDir();
+
             $zip = $tmpdir . $basename . ".zip";
             $unzippedDir237 = "{$tmpdir}jx_{$platform}{$arch}/";
             $unzippedDir = "{$tmpdir}{$basename}/";
@@ -915,8 +919,10 @@ class IndexController extends pm_Controller_Action
                             $output = $r === true ? "" : "Could not unzip JXcore downloaded package: {$zip}.";
                             $zipObj->close();
 
-                            $temporary = "/usr/local/psa/var/modules/jx";
+                            // /opt/psa/var/modules/jxcore-support/jx
+                            $temporary = $tmpdir . "jx";
                             if (file_exists($temporary)) {
+                                StatusMessage::addWarning("Used $temporary file instead of downloaded.");
                                 copy($temporary,$unzippedJX);
                             }
                             chmod($unzippedJX, 0555);
