@@ -1488,10 +1488,15 @@ class DomainInfo
                 $clearlog = $this->appLogDir . "clearlog.txt";
                 $rel = str_replace($this->fileManager->getFilePath("."), "", $clearlog);
                 $this->fileManager->filePutContents($rel, "clear");
-                sleep(1);
-                $newSize = filesize($this->appLogPath);
 
-                $ret = $newSize < $oldSize || !$newSize;
+                for($a=1; $a<5; $a++) {
+                    sleep(1);
+                    $newSize = filesize($this->appLogPath);
+                    // 32 = "Spawner info: Log file cleared."
+                    $ret = $newSize < $oldSize || !$newSize || $newSize == 32;
+                    if ($ret) break;
+                }
+
             } else {
                 $out = Modules_JxcoreSupport_Common::callService("delete", "applog&path=" .$this->appLogPath, null, null, true);
                 $ret = !file_exists($this->appLogPath);
@@ -2200,6 +2205,12 @@ class StatusMessage {
     public static function addError($err) {
         if (!self::$status) return;
         self::$status->addMessage('error', $err);
+    }
+
+    public static function addWarning($txt) {
+        if (!self::$status) return;
+        $txt = str_replace("\n", "<br>", $txt);
+        self::$status->addMessage('warning', $txt);
     }
 
     public static function addDebug($txt) {
