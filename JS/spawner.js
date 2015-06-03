@@ -49,6 +49,7 @@ if (!logPath) {
     process.exit(7);
 }
 var logPathDir = pathModule.dirname(logPath);
+var logClear = pathModule.join(logPathDir, "clearlog.txt");
 
 // searching for -u arg and converting it into int uid
 var uid = null;
@@ -162,6 +163,7 @@ if (!isRoot || !respawned) {
 
     var file = pathModule.join(options.home, options.file);
     var appDir = pathModule.dirname(file);
+    var spawner_data = null;
 
     // ########  saving nginx conf
     if (options.plesk) {
@@ -173,7 +175,6 @@ if (!isRoot || !respawned) {
             }
 
             var spawner_data_str = fs.readFileSync(spawner_data_file).toString();
-            var spawner_data = null;
             try {
                 spawner_data = JSON.parse(spawner_data_str);
             } catch(ex){
@@ -210,10 +211,13 @@ if (!isRoot || !respawned) {
         }
     }
 
+    if (spawner_data && spawner_data.domain)
+        process.title = "jx " + spawner_data.domain;
+
     var child = null;
     // this can be done only by privileged user.
     // node throws exception otherwise
-    // and if file does not exists, fileWatcher fill check for this
+    // and if file does not exists, fileWatcher fill check for it later
     var runApp = function(){
         if (fs.existsSync(file)) {
             var spawn = require('child_process').spawn;
@@ -284,13 +288,12 @@ if (!isRoot || !respawned) {
                 process.exit();
             }
 
-            var opts = { ignored: /[\/\\]\./, persistent : true, ignoreInitial : true, ignorePermissionErrors : true };
-            var watcher = chokidar.watch(appDir, opts ).on('all', function(event, path) {
+            var callback = function(event, path) {
 
-                if (pathModule.dirname(path) === logPathDir) {
+                if (pathModule.dirname(path) === pathModule.normalize(logPathDir)) {
 
                     // condition below is not used by jxpanel (only by plesk)
-                    if (options.plesk && pathModule.basename(path) === "clearlog.txt" && out && out != "ignore" ) {
+                    if (options.plesk && path === logClear && out && out != "ignore" ) {
                         try {
                             fs.ftruncateSync(out, 0);
                             log("Log file cleared.");
@@ -299,8 +302,8 @@ if (!isRoot || !respawned) {
                         }
                         try {
                             // removing clearlog.txt
-                            if (fs.existsSync(path))
-                                fs.unlinkSync(path);
+                            if (fs.existsSync(logClear))
+                                fs.unlinkSync(logClear);
                         } catch (ex) {
                             log("Could not remove clearlog file: " + ex, true);
                         }
@@ -309,8 +312,7 @@ if (!isRoot || !respawned) {
                     return;
                 }
 
-                var _extname = pathModule.extname(path).toLowerCase();
-                if(exiting || (_extname != '.js' && _extname != ".jx"))
+                if (exiting)
                     return;
 
                 log("File change (" + event + ") detected on " + path.replace(options.home, ""));
@@ -328,11 +330,58 @@ if (!isRoot || !respawned) {
                         process.exit(77);
                     }
                 }, 500);
-            });
+            };
 
-            // if app is located in subfolders, we need to monitor log dir separately for clearlog.txt
-            if (logPathDir !== appDir)
-                watcher.add(logPathDir);
+            var errorCallback = function (error) {
+                log('Watcher error: ' + error);
+            };
+
+            var test = [ "jxcore_logs/**/*",
+                "node_modules",
+                "nope.jx" ];05
+
+            var rg = "(" + test.join("|") + ")";
+
+//            for(var o in test) {
+//                test[o] = new RegExp('^' + test[o] + '$');
+//            }
+
+            var opts = {
+//                ignored: function(path) {
+//
+//                    var ignore = false;
+////                    for(var o in test) {
+//                        if (rg.test(path)) {
+//                            console.log('IGNORED ' + path);
+//                            return true;
+//                        }
+////                    }
+//                    console.log('NOT IGNORED ' + path);
+//                    return false;
+//                },
+                ignored : rg,
+                persistent : true,
+                ignoreInitial : true,
+                ignorePermissionErrors : true,
+                followSymlinks : false,
+                interval : 2000,
+                binaryInterval : 2000,
+                // 'fsevents' module was manually deleted from node_modules
+                // (it contained .node files and was not portable)
+                // however this module is optional anyway
+                useFsEvents : false,
+                usePolling : false, // do not change or you might have "Error: watch ENOSPC"
+                depth : 2
+            };
+
+            var filesToBeWatched = [
+                pathModule.join(appDir, "**", "*.js"),
+                pathModule.join(appDir, "**", "*.jx")
+            ];
+
+            chokidar.watch(filesToBeWatched, opts).on('all', callback).on('error', errorCallback);
+            // separately as jxcore_logs is excluded in options
+            chokidar.watch(logClear, { interval : 1000 }).on('all', callback).on('error', errorCallback);
         }
     }, function (delay) {
         log("Subscribing is delayed by " + delay + " ms.");
