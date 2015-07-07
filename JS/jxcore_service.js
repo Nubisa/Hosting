@@ -393,5 +393,5 @@ srv.listen(18999, "127.0.0.1");
 try {
     require("./nginxWatch.js");
 } catch (ex) {
-
+    console.log("Cannot require ./nginxWatch.js", ex);
 }

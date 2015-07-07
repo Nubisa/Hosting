@@ -6,14 +6,28 @@ var chokidar = require('chokidar');
 var reloading = false;
 
 var dir = "/etc/nginx/jxcore.conf.d/";
-var opts = { ignored: /[\/\\]\./, persistent : true, ignoreInitial : true, ignorePermissionErrors : true };
-chokidar.watch(dir, opts ).on('all', function(event, _path) {
+var opts = {
+    ignored: /[\/\\]\./,
+    persistent : true,
+    ignoreInitial : true,
+    ignorePermissionErrors : true,
+    interval : 2500,
+    useFsEvents : false,
+    usePolling : true
+};
+
+chokidar.watch(dir, opts).on('all', function(event, _path) {
 
     if (_path && _path.slice(-5) === ".conf")
         reload();
 });
 
 // **** debug
+
+var log = function() {
+    console.log.apply(this, arguments);
+};
+
 //var cnt = 0;
 //var fs = require("fs");
 //var log = function() {
@@ -30,7 +44,7 @@ chokidar.watch(dir, opts ).on('all', function(event, _path) {
 // **** debug
 
 jxcore.tasks.on("message", function(threadId, obj){
-    console.log(obj.reloaded ? "reloaded" : "not reloaded");
+    log(obj.reloaded ? "reloaded" : "not reloaded");
     reloading = false;
 });
 
@@ -55,6 +69,7 @@ var reload = function() {
         return;
 
     reloading = true;
+    log("reloading");
     // wait a bit, maybe other nginx configs will be created/changed too...
     setTimeout(function() {
         jxcore.tasks.addTask(task);
