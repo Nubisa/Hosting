@@ -10,10 +10,10 @@ var http = require("http");
 var url = require("url");
 var root_functions = require("./root_functions.js");
 
+
+process.title = "jx service";
 var jxconfig = root_functions.readJXconfig();
-
 var psaadm_uid = root_functions.getUID("psaadm");
-
 var errors = [];
 
 if (!psaadm_uid) {
