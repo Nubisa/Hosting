@@ -314,6 +314,6 @@
 		"node_modules/chokidar/node_modules/readdirp/test/bed/root_file3.ext3"
 	],
 	"preInstall": null,
-	"library": false,
+	"library": true,
 	"fs_reach_sources": false
 }
