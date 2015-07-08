@@ -27,6 +27,10 @@ class DomainController extends pm_Controller_Action
             array(
                 'title' => 'JXcore Application Log ',
                 'action' => 'log',
+            ),
+            array(
+                'title' => 'Restart Manager ',
+                'action' => 'restartmanager',
             )
         );
 
@@ -177,6 +181,15 @@ class DomainController extends pm_Controller_Action
             'size' => 80
         ));
 
+        $form->addElement('textarea', Modules_JxcoreSupport_Common::sidDomainJXcoreAppEnvVars, array(
+            'label' => 'Environment variables',
+            'escape' => false,
+            'rows' => 4,
+            'validators' => array(new MyValid_EnvVars()),
+            'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainJXcoreAppEnvVars),
+            'description' => "Environment variables for the application. Please add one variable per line in format VARIABLE_NAME=value."
+        ));
+
         if (Modules_JxcoreSupport_Common::$isAdmin) {
             $form->addElement('simpleText', 'exampleSimpleText', array(
                 'label' => 'Domain root folder',
@@ -286,6 +299,7 @@ class DomainController extends pm_Controller_Action
                     $params = array(
                         Modules_JxcoreSupport_Common::sidDomainJXcoreAppPath,
                         Modules_JxcoreSupport_Common::sidDomainJXcoreAppArgs,
+                        Modules_JxcoreSupport_Common::sidDomainJXcoreAppEnvVars,
                         Modules_JxcoreSupport_Common::sidDomainAppLogWebAccess,
                         Modules_JxcoreSupport_Common::sidDomainAppUseSSL,
                         Modules_JxcoreSupport_Common::sidDomainAppSSLCert,
@@ -439,6 +453,115 @@ class DomainController extends pm_Controller_Action
         $this->view->form = $form;
     }
 
+
+    public function restartmanagerAction() {
+        if (!$this->check())
+            return;
+
+        $form = new pm_Form_Simple();
+
+        $enabledOnForm = $this->getRequest()->getParam(Modules_JxcoreSupport_Common::sidDomainRestartMgrEnabled);
+
+        $form->addElement('hidden', 'id', array(
+            'value' => pm_Settings::get($this->ID),
+        ));
+
+        $form->addElement('checkbox', Modules_JxcoreSupport_Common::sidDomainRestartMgrEnabled, array(
+            'label' => 'Enable Restart Manager',
+            'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainRestartMgrEnabled)
+        ));
+
+        // description for checkbox
+        $form->addElement('simpleText', "restartManagerInfo", array(
+            'label' => '',
+            'escape' => false,
+            'value' => "<span style='color: gray; margin-top: -40px; margin-bottom: 20px;'>The Restart Manager monitors file system changes recursively in application folder and restarts the application if any of defined below Watched Paths will be changed.</span><br>&nbsp;"
+        ));
+
+        $form->addElement('text', Modules_JxcoreSupport_Common::sidDomainRestartMgrInterval, array(
+            'label' => 'Watch interval',
+            'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainRestartMgrInterval),
+            'validators' => array('Int',
+                array("GreaterThan", true, array('min' => 1999))
+            ),
+            'filters' => array('StringTrim'),
+            'required' => $enabledOnForm,
+            'description' => "The interval at which files' changes are watched. Lower values may impact performance (greater CPU usage) of the applications with large folder structure. The minimum value is 2000 ms. The default value is 5000 ms.",
+            'escape' => false
+        ));
+
+        $form->addElement('text', Modules_JxcoreSupport_Common::sidDomainRestartMgrDepth, array(
+            'label' => 'Watch depth',
+            'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainRestartMgrDepth),
+            'validators' => array('Int',
+                array("Between", true, array('min' => 0, 'max' => 3))
+            ),
+            'filters' => array('StringTrim'),
+            'required' => $enabledOnForm,
+            'description' => "Defines amount of levels of subdirectories to be watched. The default value is 2. The minimum value is 0 (no recursion). The maximum value is 3.",
+            'escape' => false
+        ));
+
+
+        $form->addElement('textarea', Modules_JxcoreSupport_Common::sidDomainRestartMgrWatchedPaths, array(
+            'label' => 'Watched paths',
+            'escape' => false,
+            'rows' => 4,
+            'required' => $enabledOnForm,
+            'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainRestartMgrWatchedPaths),
+            'description' => "Here you can specify files names or masks to be watched. By default only the following masks are watched: '*.js' and '*.jx'."
+        ));
+
+        $form->addElement('textarea', Modules_JxcoreSupport_Common::sidDomainRestartMgrIgnoredPaths, array(
+            'label' => 'Ignored paths',
+            'escape' => false,
+            'rows' => 4,
+            'value' => $this->domain->get(Modules_JxcoreSupport_Common::sidDomainRestartMgrIgnoredPaths),
+            'description' => "The files names or masks to be ignored. The default value is 'node_modules'."
+        ));
+
+        // description for checkbox
+        $form->addElement('simpleText', "pathsInfo", array(
+            'label' => '',
+            'escape' => false,
+            'value' => "<span style='color: gray; margin-top: -40px; margin-bottom: 20px;'><strong>Watched paths and Ignored paths:</strong><br>" .
+                "- Please add one path/mask per line.<br>" .
+                "- They are compared against absolute file paths (starting from application home directory).<br>" .
+                "- All masks are recursive, unless they are prefixed with `./`. For example:<br>".
+                "&nbsp;&nbsp;&nbsp;*.js - recursive<br>".
+                "&nbsp;&nbsp;&nbsp;./folder/*.js - non recursive<br>".
+                "</span><br>&nbsp;"
+        ));
+
+
+        $form->addControlButtons(array(
+            'cancelLink' => Modules_JxcoreSupport_Common::$urlJXcoreDomains
+        ));
+
+        if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
+            $this->_status->beforeRedirect = true;
+
+            $params = array(
+                Modules_JxcoreSupport_Common::sidDomainRestartMgrEnabled,
+                Modules_JxcoreSupport_Common::sidDomainRestartMgrDepth,
+                Modules_JxcoreSupport_Common::sidDomainRestartMgrWatchedPaths,
+                Modules_JxcoreSupport_Common::sidDomainRestartMgrInterval,
+                Modules_JxcoreSupport_Common::sidDomainRestartMgrIgnoredPaths
+            );
+
+            foreach ($params as $param) {
+                $this->domain->set($param, $form->getValue($param));
+            }
+
+            // it is invoked just for saving .dat files
+            // internal watcher will reload the watcher without restarting the app
+            $cmd = $this->domain->getSpawnerCommand();
+            StatusMessage::dataSavedOrNot($cmd);
+            $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlDomainRestartManager));
+        }
+
+        $this->view->form = $form;
+    }
 }
 
 class MyValid_FileName extends Zend_Validate_Abstract
@@ -621,6 +744,59 @@ class MyValid_AppArgs extends Zend_Validate_Abstract
 
         $ret = Modules_JxcoreSupport_Common::parseAppArgs($value);
         if (!$ret) {
+            $this->_error(self::MSG_ERR);
+            return false;
+        }
+
+        return true;
+    }
+}
+
+
+class MyValid_EnvVars extends Zend_Validate_Abstract
+{
+    const MSG_ERR = 'msgErr';
+    public $msgErr = "";
+    public $msgDetails = "";
+
+    protected $_messageVariables = array(
+        'msgErr' => 'msgErr',
+        'msgDetails' => 'msgDetails'
+    );
+
+    protected $_messageTemplates = array(
+        self::MSG_ERR => "Cannot parse.%msgDetails%"
+    );
+
+    public function isValid($value)
+    {
+        $value = trim($value);
+        $this->_setValue($value);
+
+        $arr = explode("\n", $value);
+        $err = "";
+        foreach($arr as $line) {
+            $pair = explode("=", $line);
+
+
+            if (count($pair) != 2) {
+                $err = "Invalid format. Use equality sign (`=`) to assign a value";
+                break;
+            }
+
+            if (trim($pair[0]) == "") {
+                $err = "Invalid variable name";
+                break;
+            }
+
+            if (trim($pair[1]) == "") {
+                $err = "Invalid value";
+                break;
+            }
+        }
+
+        if ($err) {
+            $this->msgDetails = " {$err} ($line).";
             $this->_error(self::MSG_ERR);
             return false;
         }

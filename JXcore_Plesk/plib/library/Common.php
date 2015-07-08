@@ -26,6 +26,7 @@ class Modules_JxcoreSupport_Common
     public static $urlJXcoreMonitorLog = "";
     public static $urlDomainConfig = "";
     public static $urlDomainAppLog = "";
+    public static $urlDomainRestartManager = "";
 
     public static $firstRun = false;
 
@@ -54,6 +55,12 @@ class Modules_JxcoreSupport_Common
     const sidDomainAppSSLCert = "jx_domain_app_ssl_cert";
     const sidDomainAppSSLKey = "jx_domain_app_ssl_key";
 
+    const sidDomainRestartMgrEnabled = "jx_domain_restart_mgr_enabled";
+    const sidDomainRestartMgrInterval = "jx_domain_restart_mgr_interval";
+    const sidDomainRestartMgrDepth = "jx_domain_restart_mgr_depth";
+    const sidDomainRestartMgrWatchedPaths = "jx_domain_restart_mgr_watchedPaths";
+    const sidDomainRestartMgrIgnoredPaths = "jx_domain_restart_mgr_ignoredPaths";
+
     const sidDomainAppLogWebAccess = "jx_domain_app_log_web_access";
     const sidDomainAppNginxDirectives = "jx_domain_app_nginx_directives";
     const sidDomainJXcoreEnabled = "jx_domain_jxcore_enabled";
@@ -63,6 +70,7 @@ class Modules_JxcoreSupport_Common
     const sidDomainJXcoreAppPath = "jx_domain_app_path";
     const sidDomainJXcoreAppArgs = "jx_domain_app_args";
     const sidDomainJXcoreAppArgsArrayStringified = "jx_domain_app_args_arr_str";
+    const sidDomainJXcoreAppEnvVars = "jx_domain_app_env_vars";
 
     // subscription parameters
     public static $subscriptionParams = null;
@@ -195,6 +203,7 @@ class Modules_JxcoreSupport_Common
         self::$urlJXcoreMonitorLog = $baseUrl . "index.php/index/log";
         self::$urlDomainConfig = $baseUrl . "index.php/domain/config";
         self::$urlDomainAppLog = $baseUrl . "index.php/domain/log";
+        self::$urlDomainRestartManager = $baseUrl . "index.php/domain/restartmanager";
 
         self::$firstRun = !pm_Settings::get(self::sidFirstRun); // if empty, that it is first run
 
@@ -574,6 +583,7 @@ class Modules_JxcoreSupport_Common
 
                     $commands[] = '';
                     $commands[] = "if [ -e {$domain->getSpawnerPath()} ]; then";
+                    $commands[] = "cp " . Modules_JxcoreSupport_Common::$pathSpawner . " " . $domain->getSpawnerPath();
                     $commands[] = $cmd;
                     $commands[] = "fi";
                 }
@@ -1008,8 +1018,10 @@ class Modules_JxcoreSupport_Common
             self::enableServices();
             $ret = Modules_JxcoreSupport_Common::updateCronImmediate("start");
 
-            for($a=1; $a<90; $a++) {
-                sleep(1);
+            $interval = 1000000 / 2;// half of sec
+            // wait for 90 sec. 60 should be enough anyway
+            for($a=1; $a<180; $a++) {
+                usleep($interval);
                 $json = self::getMonitorJSON(true);
                 if ($json !== null) break;
             }
@@ -1126,7 +1138,19 @@ class DomainInfo
     }
 
     public function get($sid) {
-        return pm_Settings::get($sid . $this->id);
+        $wasSet = $this->wasSet($sid);
+
+        $defaults = array();
+        $defaults[Modules_JxcoreSupport_Common::sidDomainRestartMgrEnabled] = 1;
+        $defaults[Modules_JxcoreSupport_Common::sidDomainRestartMgrWatchedPaths] = "*.js\n*.jx";
+        $defaults[Modules_JxcoreSupport_Common::sidDomainRestartMgrIgnoredPaths] = "node_modules";
+        $defaults[Modules_JxcoreSupport_Common::sidDomainRestartMgrInterval] = 5000;
+        $defaults[Modules_JxcoreSupport_Common::sidDomainRestartMgrDepth] = 2;
+
+        if (!$wasSet && isset($defaults[$sid]))
+            return $defaults[$sid];
+        else
+            return pm_Settings::get($sid . $this->id);
     }
 
     public function wasSet($sid) {
@@ -1218,13 +1242,15 @@ class DomainInfo
 
         $running =  $json !== null && $path !== false && strpos($json, $path) !== false;
 
+        $interval = 1000000 / 2; // half of sec
         if ($wait && Modules_JxcoreSupport_Common::$restartFlag !== "nowait") {
-            sleep(1);
-            for($a=1; $a<5; $a++) {
+            usleep($interval);
+            // wait for 5 sec
+            for($a=1; $a<10; $a++) {
                 Modules_JxcoreSupport_Common::clearMonitorJSON();
                 $running = $this->isAppRunning();
                 if ($running) break;
-                sleep(1);
+                usleep($interval);
             }
         }
         return $running;
@@ -1461,6 +1487,15 @@ class DomainInfo
 
         if ($this->JXcoreSupportEnabled()) {
             $arr["nginx"] = $nginx_directives;
+            $arr["env"] = $this->get(Modules_JxcoreSupport_Common::sidDomainJXcoreAppEnvVars);
+
+            $watch = array();
+            $watch["enabled"] = $this->get(Modules_JxcoreSupport_Common::sidDomainRestartMgrEnabled);
+            $watch["paths"] = $this->get(Modules_JxcoreSupport_Common::sidDomainRestartMgrWatchedPaths);
+            $watch["ignore"] = $this->get(Modules_JxcoreSupport_Common::sidDomainRestartMgrIgnoredPaths);
+            $watch["interval"] = intval($this->get(Modules_JxcoreSupport_Common::sidDomainRestartMgrInterval));
+            $watch["depth"] = intval($this->get(Modules_JxcoreSupport_Common::sidDomainRestartMgrDepth));
+            $arr["watch"] = $watch;
 
             $data_new = json_encode($arr, 128);  // 128 stands for pretty print
             $data_old = "";
@@ -1483,14 +1518,28 @@ class DomainInfo
 
             $running = $this->isAppRunning();
 
+            $json = Modules_JxcoreSupport_Common::getMonitorJSON();
+            $monitorRunning = $json !== null;
+
+            if (!$monitorRunning) {
+//                StatusMessage::addDebug("monitor not running - trying to delete by php " . $this->appLogPath);
+                unlink($this->appLogPath);
+                StatusMessage::infoOrError(file_exists($this->appLogPath), 'Log cleared.', 'Could not clear the log file.');
+                return;
+            }
+
             $ret = false;
             if ($running) {
+//                StatusMessage::addDebug("running - trying to delete log by clearfile");
                 $clearlog = $this->appLogDir . "clearlog.txt";
                 $rel = str_replace($this->fileManager->getFilePath("."), "", $clearlog);
-                $this->fileManager->filePutContents($rel, "clear");
+                $this->fileManager->filePutContents($rel, "clear" + mt_rand());
 
-                for($a=1; $a<5; $a++) {
-                    sleep(1);
+                $interval = 1000000 / 3;  // 1/3 of sec
+                // wait for 5 sec ( 1/3 * 3 * 5 = 15)
+                for($a=1; $a<15; $a++) {
+                    usleep($interval);
+                    clearstatcache();
                     $newSize = filesize($this->appLogPath);
                     // 32 = "Spawner info: Log file cleared."
                     $ret = $newSize < $oldSize || !$newSize || $newSize == 32;
@@ -1498,11 +1547,13 @@ class DomainInfo
                 }
 
             } else {
+//                StatusMessage::addDebug("not running - trying to delete log by service");
                 $out = Modules_JxcoreSupport_Common::callService("delete", "applog&path=" .$this->appLogPath, null, null, true);
                 $ret = !file_exists($this->appLogPath);
             }
 
             StatusMessage::infoOrError(!$ret, 'Log cleared.', 'Could not clear the log file.');
+//            StatusMessage::addDebug($out);
         }
         return true;
     }
