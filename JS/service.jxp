@@ -4,6 +4,7 @@
 	"author": "Nubisa Inc.",
 	"description": "JXcore Plesk Service",
 	"company": "Nubisa Inc.",
+	"copyright": "",
 	"website": "http://jxcore.com",
 	"package": null,
 	"startup": "jxcore_service.js",
