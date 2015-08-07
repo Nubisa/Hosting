@@ -1,0 +1,11 @@
+; Use this file to define custom OS type (in case if `uname` does not correspond to actual OS platform/arch).
+
+; Following are the examples of most common platform types:
+; bsd9, bsd10, deb, osx, rh, suse, ub
+; For example:
+; platform = rh
+
+; Following are the examples of supported platform architectures:
+; 32, 64
+; For example:
+; arch = 32
