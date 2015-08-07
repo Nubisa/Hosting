@@ -50,6 +50,9 @@ var readSpawnerDataFile = function(exitOnError) {
     try {
         if (data) {
             data.env = parseAppEnv(data.env);
+            data.env.JX_PLESK_APP_HTTP_PORT = data.tcp;
+            data.env.JX_PLESK_APP_HTTPS_PORT = data.tcps;
+            data.env.JX_PLESK_APP_DOMAIN = data.domain;
             return data;
         }
     } catch(ex) {
