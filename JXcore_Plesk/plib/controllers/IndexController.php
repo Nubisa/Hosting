@@ -4,6 +4,10 @@
 
 class IndexController extends pm_Controller_Action
 {
+    private $varDir = null;
+    private $jxDir = null;
+    private $jxFileName = null;
+
     public function init()
     {
         parent::init();
@@ -43,6 +47,13 @@ class IndexController extends pm_Controller_Action
                 )
             );
         }
+
+        // starting from 0.2.7 we will use static dir for jx
+        // no need to keep platform specific dir, e.g. /.../jx_ub32v8/
+        // let it be /.../jxcore/
+        $this->varDir = pm_Context::getVarDir();
+        $this->jxDir = "{$this->varDir}jxcore/";
+        $this->jxFileName = "{$this->jxDir}jx";
     }
 
     /**
@@ -233,8 +244,8 @@ class IndexController extends pm_Controller_Action
             if (!Modules_JxcoreSupport_Common::isJXValid()) {
                 $out = null;
 
-                $ok = $this->download_JXcore($out);
-                $this->_status->addMessage($ok ? 'info' : 'error', $out);
+                list($err, $msg) = $this->downloadAndUnpack_JXcore();
+                if ($msg) $this->_status->addMessage($err ? 'error' : 'info', $msg);
 
                 Modules_JxcoreSupport_Common::enableServices();
                 Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded();
@@ -837,136 +848,177 @@ class IndexController extends pm_Controller_Action
     }
 
 
-    public function download_JXcore(&$output)
-    {
+    // downloads only
+    // returns array(err, zipFileName)
+    // where err:  null or errMsg
+    public function download_JXcore() {
         // this was for 2.3.7
         // $downloadURL = "https://s3.amazonaws.com/nodejx/";
 
         $newVersion = new JXcoreLatestVersionInfo();
-        if ($newVersion->error) {
-            $output = $newVersion->status;
-            return false;
-        }
+        if ($newVersion->error)
+            return array($newVersion->status, null);
 
         $downloadURL = $newVersion->url;
 
-        // 32 or 64
-        $arch = PHP_INT_SIZE * 8;
-        $uname_s = strtolower(php_uname("s"));
+        $osInfo = JXcoreOSInfo::get();
+        if ($osInfo->error)
+            return array($osInfo->error, null);
 
-        $platform = null;
+        $url = $downloadURL . $osInfo->basename . ".zip";
 
-        if (strpos($uname_s, 'win') === 0) {
-            $platform = "win";
-        } else
-            if ($uname_s == "darwin") {
-                $platform = "osx";
-            } else
-                if ($uname_s == "linux") {
+        // /opt/psa/var/modules/jxcore-support/ or
+        // /usr/local/psa/var/modules/jxcore-support/
+        $varDir = pm_Context::getVarDir();
 
-                    $procv = shell_exec('cat /proc/version');
+        $zip = $varDir . $osInfo->basename . ".zip";
+        $file = fopen($url, 'r');
+        if (!$file)
+            return array("Cannot download file {$url}. Please check the internet connection or whether this platform is supported or not. ", null);
 
-                    $distros = array(
-                        "Red Hat" => "rh", // red hat/fedora/centos
-                        "Ubuntu" => "ub", // ubuntu/mint
-                        'SUSE' => 'suse',
-                        'Debian' => 'deb'
-                    );
-
-                    foreach ($distros as $key => $val) {
-                        $pos = stripos($procv, $key);
-                        if ($pos !== false) {
-                            $platform = $val;
-                            break;
-                        }
-                    }
-                }
-
-
-        if ($platform !== null) {
-            $basename = "jx_{$platform}{$arch}v8";
-
-            $url = $downloadURL . $basename . ".zip";
-
-            // /opt/psa/var/modules/jxcore-support/ or
-            // /usr/local/psa/var/modules/jxcore-support/
-            $tmpdir = pm_Context::getVarDir();
-
-            $zip = $tmpdir . $basename . ".zip";
-            $unzippedDir237 = "{$tmpdir}jx_{$platform}{$arch}/";
-            $unzippedDir = "{$tmpdir}{$basename}/";
-            $unzippedJX = "{$unzippedDir}jx";
-
-            if (true /*!file_exists($unzipped_jx)*/) {
-
-                $file = fopen($url, 'r');
-                if (!$file) {
-                    $output = "Cannot download file {$url}: " . join("<br>", error_get_last()) ;
-                    return false;
-                } else {
-                    if (file_put_contents($zip, $file) === false) {
-                        @unlink($zip);
-                        $output = 'Cannot save downloaded file {$file} into {$zip}.';
-                        return false;
-                    } else {
-                        Modules_JxcoreSupport_Common::rmdir($unzippedDir);
-                        Modules_JxcoreSupport_Common::rmdir(Modules_JxcoreSupport_Common::$dirSubscriptionConfigs);
-
-                        $zipObj = new ZipArchive();
-                        $res = $zipObj->open($zip);
-                        if ($res === true) {
-                            $r = $zipObj->extractTo($tmpdir);
-                            $output = $r === true ? "" : "Could not unzip JXcore downloaded package: {$zip}.";
-                            $zipObj->close();
-
-                            // /opt/psa/var/modules/jxcore-support/jx
-                            $temporary = $tmpdir . "jx";
-                            if (file_exists($temporary)) {
-                                StatusMessage::addWarning("Used $temporary file instead of downloaded.");
-                                copy($temporary,$unzippedJX);
-                            }
-                            chmod($unzippedJX, 0555);
-                            @unlink($zip);
-                        } else {
-                            Modules_JxcoreSupport_Common::rmdir($unzippedDir237);
-                            $output = "Could not open JXcore downloaded package: {$zip}.";
-                            return false;
-                        }
-
-
-                        if (file_exists($unzippedJX)) {
-                            $jxv = shell_exec("$unzippedJX -jxv");
-                            Modules_JxcoreSupport_Common::setJXdata($jxv, $unzippedJX);
-                            Modules_JxcoreSupport_Common::updateCron();
-
-                            $output = "JXcore {$basename} version {$jxv} successfully installed.";
-                            return true;
-                        }
-                    }
-                }
-            }
-        } else {
-            $output = "Could not determine platform for this machine.";
-            return false;
+        if (file_put_contents($zip, $file) === false) {
+            @unlink($zip);
+            return array('Cannot save downloaded file {$file} into {$zip}.', null);
         }
 
+        return array(null, $zip);
+    }
+
+    // copies new binary into old one (with error check and rollback)
+    // returns true if success, or err message otherwise
+    private function replace_JXcore($from) {
+
+        if (!file_exists($from)) return "Source file does not exist: $from";
+
+        if (!file_exists($this->jxDir)) {
+            if (!@mkdir($this->jxDir))
+                return "Cannot create directory: " . error_get_last()['message'];
+        }
+
+        $backup = null;
+        if (file_exists($this->jxFileName)) {
+            // backup first
+            $backup = $this->jxFileName . ".old";
+            if (!@rename($this->jxFileName, $backup))
+                return "Cannot create a backup file: " . error_get_last()['message'];
+        }
+
+        if (!@copy($from, $this->jxFileName)) {
+            // restore backup
+            if ($backup) @rename($backup, $this->jxFileName);
+            return "Cannot copy source file: " . error_get_last()['message'];
+        }
+
+        if (!@chmod($this->jxFileName, 0555)) {
+            // restore backup
+            if ($backup) @rename($backup, $this->jxFileName);
+            return "Cannot chmod target file: " . error_get_last()['message'];
+        }
+
+        $jxv = shell_exec("{$this->jxFileName} -jxv");
+        if ($jxv === NULL) {
+            if ($backup) @rename($backup, $this->jxFileName);
+            return "Cannot execute `jx -jxv`. Is the binary downloaded for the right platform?";
+        }
+
+        Modules_JxcoreSupport_Common::setJXdata($jxv, $this->jxFileName);
+        Modules_JxcoreSupport_Common::updateCron();
+
+        @unlink($backup);
+        return true;
+    }
+
+    // returns filename if it exists or false
+    private function getAlternateJXcore() {
+        // /opt/psa/var/modules/jxcore-support/jx
+        $alternate = $this->varDir . "jx";
+        if (file_exists($alternate))
+            return $alternate;
+        else
+            return false;
+    }
+
+    // return true if alternate binary was used or err message otherwise
+    private function useAlternateJXcore() {
+        $alternate = $this->getAlternateJXcore();
+        if ($alternate !== false) {
+
+            $ret = $this->replace_JXcore($alternate);
+            if ($ret !== true) {
+                StatusMessage::addWarning("Cannot use alternate $alternate file. Error: $ret");
+                return $ret;
+            } else {
+                StatusMessage::addWarning("Used $alternate file instead of downloaded.");
+                return true;
+            }
+        }
         return false;
     }
 
+    // returns array(error: true/false, msg)
+    private function unpack_JXcore($zip)
+    {
+        if ($this->useAlternateJXcore() === true)
+            return array(false, "");
+
+        $osInfo = JXcoreOSInfo::get();
+
+        $unzippedDir237 = "{$this->varDir}jx_{$osInfo->platform}{$osInfo->arch}/";
+        $unzippedDir = "{$this->varDir}{$osInfo->basename}/";
+        $unzippedJX = "{$unzippedDir}jx";
+
+        Modules_JxcoreSupport_Common::rmdir($unzippedDir);
+        Modules_JxcoreSupport_Common::rmdir(Modules_JxcoreSupport_Common::$dirSubscriptionConfigs);
+
+        $zipObj = new ZipArchive();
+        $res = $zipObj->open($zip);
+        if ($res === true) {
+            $r = $zipObj->extractTo($this->varDir);
+            $zipObj->close();
+
+            if ($r !== true)
+                return array(true, "Could not unzip JXcore downloaded package: {$zip}.");
+
+            $ret = $this->replace_JXcore($unzippedJX);
+            if ($ret !== true)
+                return array(true, $ret);
+
+            @unlink($zip);
+            return array(false, "JXcore {$osInfo->basename} version {$jxv} successfully installed.");
+        } else {
+            Modules_JxcoreSupport_Common::rmdir($unzippedDir237);
+            return array(true, "Could not open JXcore downloaded package: {$zip}.");
+        }
+    }
+
+    // return array(error: true/false, msg)
+    private function downloadAndUnpack_JXcore() {
+        list($err, $zip) = $this->download_JXcore();
+        if ($err)
+            return array(true, $err);
+
+        list($err, $msg) = $this->unpack_JXcore($zip);
+        return array($err, $msg);
+    }
 
 
 
     private function JXcoreInstallUninstall($req)
     {
+        list ($err, $zip) = $this->download_JXcore();
+        if ($err) {
+            $this->_status->addMessage('error', $err);
+            return;
+        }
+
         // shutting down monitor if it's online
         if (in_array($req, array('install', 'uninstall'), true) && Modules_JxcoreSupport_Common::isJXValid()) {
             Modules_JxcoreSupport_Common::monitorStartStop('stop');
         }
 
         if ($req === 'install') {
-            $out = null;
-            $ok = $this->download_JXcore($out);
-            $this->_status->addMessage($ok ? 'info' : 'error', $out);
+            list($err, $msg) = $this->unpack_JXcore($zip);
+            if ($msg) $this->_status->addMessage($err ? 'error' : 'info', $msg);
             Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded("norestart");
             Modules_JxcoreSupport_Common::monitorStartStop('start');
         } else
@@ -980,7 +1032,7 @@ class IndexController extends pm_Controller_Action
                 Modules_JxcoreSupport_Common::setJXdata(null, null);
 
                 if ($ok) {
-                    $this->_status->addMessage('info', "JXcore succesfully uninstalled.");
+                    $this->_status->addMessage('info', "JXcore successfully uninstalled.");
                 } else {
                     $this->_status->addMessage('error', "Could not remove JXcore folder: $dir");
                 }
