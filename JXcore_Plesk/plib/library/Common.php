@@ -2344,3 +2344,85 @@ class JXcoreLatestVersionInfo {
             $this->status = "Please, you must update JXcore to {$this->version}.";
     }
 }
+
+class JXcoreOSInfo {
+
+    public $platform = null;
+    public $arch = null;
+    public $error = null;
+    public $basename = null;
+    public $custom = false;
+
+    private function determinePlatform() {
+        $uname_s = strtolower(php_uname("s"));
+        $platform = null;
+
+        if ($uname_s == "darwin") {
+            $platform = "osx";
+        } else {
+            if ($uname_s == "linux") {
+
+                $procv = shell_exec('cat /proc/version');
+
+                $distros = array(
+                    "Red Hat" => "rh", // red hat/fedora/centos
+                    "Ubuntu" => "ub", // ubuntu/mint
+                    'SUSE' => 'suse',
+                    'Debian' => 'deb',
+                    'FreeBSD' => 'bsd'
+                );
+
+                foreach ($distros as $key => $val) {
+                    $pos = stripos($procv, $key);
+                    if ($pos !== false) {
+                        $platform = $val;
+                        break;
+                    }
+                }
+
+                if ($platform === "bsd") {
+                    $pos = stripos($procv, "9.");
+                    if ($pos !== false)
+                        $platform .= "9";
+                    else
+                        $platform .= "10";
+                }
+            }
+        }
+        return $platform;
+    }
+
+    function JXcoreOSInfo(){
+        $tmpdir = pm_Context::getVarDir();
+        $ini_array = parse_ini_file("$tmpdir/jxos.txt");
+
+        if (isset($ini_array["platform"])) {
+            $this->platform = $ini_array["platform"];
+            $this->custom = true;
+        } else {
+           $this->platform = $this->determinePlatform();
+           if (!$this->platform)
+               $this->error = "Could not determine platform for this machine";
+        }
+
+        if (isset($ini_array["arch"])) {
+            $this->arch = $ini_array["arch"];
+            $this->custom = true;
+        } else {
+            // 32 or 64
+            $this->arch = PHP_INT_SIZE * 8;
+        }
+
+        $this->basename = "jx_{$this->platform}{$this->arch}v8";
+    }
+
+
+    public static $info = null;
+
+    public static function get() {
+        if (!JXcoreOSInfo::$info)
+            JXcoreOSInfo::$info = new JXcoreOSInfo();
+
+        return JXcoreOSInfo::$info;
+    }
+}
