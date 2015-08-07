@@ -2394,7 +2394,7 @@ class JXcoreOSInfo {
 
     function JXcoreOSInfo(){
         $tmpdir = pm_Context::getVarDir();
-        $ini_array = parse_ini_file("$tmpdir/jxos.txt");
+        $ini_array = parse_ini_file("$tmpdir/jxos.ini");
 
         if (isset($ini_array["platform"])) {
             $this->platform = $ini_array["platform"];
