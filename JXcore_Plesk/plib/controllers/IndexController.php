@@ -281,7 +281,7 @@ class IndexController extends pm_Controller_Action
         if (Modules_JxcoreSupport_Common::$isAdmin) {
 
             $newVersion = new JXcoreLatestVersionInfo(false);
-            $latest = $newVersion->isLatest || $newVersion->isUpdateAvailable ? '. <span class="hint" style="display: inline-block;">' . $newVersion->status . '</span>' : "";
+            $latest = $newVersion->isLatest || $newVersion->isUpdateAvailable ? '. <span class="hint" style="display: inline-block; vertical-align: text-top;">' . $newVersion->status . '</span>' : "";
 
             // JXcore install uninstall
             $form->addElement('hidden', $sidJXcore, array(

@@ -2337,8 +2337,11 @@ class JXcoreLatestVersionInfo {
         if ($this->isLatest)
             $this->status = "This is the latest.";
 
-        if ($this->isUpdateAvailable)
+        if ($this->isUpdateAvailable) {
             $this->status = "New version is available: " . $arr[1];
+            if ($this->localNumber < "0.3.0.5" && $this->remoteNumber >= "0.3.0.5")
+                $this->status .= ".<br><span style='color: red;'>It is highly recommended to upgrade to this version.</span>";
+        }
 
         if ($this->mustUpdate)
             $this->status = "Please, you must update JXcore to {$this->version}.";
