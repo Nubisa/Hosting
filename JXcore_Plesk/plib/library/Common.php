@@ -894,6 +894,8 @@ class Modules_JxcoreSupport_Common
      */
     private static function checkNginx($verbose = true)
     {
+        // disabled
+        return false;
         $cmd = '/usr/local/psa/admin/bin/nginxmng -s 2>&1';
         @exec($cmd, $out, $ret);
         $str = join("\n", $out);
@@ -913,6 +915,8 @@ class Modules_JxcoreSupport_Common
 
     private static function enableNginx()
     {
+        // disabled
+        return;
         $cmd2 = "/usr/local/psa/admin/bin/nginxmng -e 2>&1";
 
         if (!self::checkNginx(false)) {
