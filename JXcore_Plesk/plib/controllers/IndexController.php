@@ -984,6 +984,7 @@ class IndexController extends pm_Controller_Action
                 return array(true, $ret);
 
             @unlink($zip);
+            $jxv = pm_Settings::get(Modules_JxcoreSupport_Common::sidJXversion);
             return array(false, "JXcore {$osInfo->basename} version {$jxv} successfully installed.");
         } else {
             Modules_JxcoreSupport_Common::rmdir($unzippedDir237);
