@@ -6,7 +6,7 @@
   </description>
   <os>unix</os>
   <version>0.2.7</version>
-  <release>2</release>
+  <release>3</release>
   <vendor>Nubisa, Inc.</vendor>
   <plesk_min_version>11.5.30</plesk_min_version>
 </module>
