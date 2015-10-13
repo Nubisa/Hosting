@@ -7,7 +7,7 @@ class DebugController extends pm_Controller_Action
     {
         parent::init();
 
-        $this->before = $this->getEnvVars();
+//        $this->before = $this->getEnvVars();
 
         if(Modules_JxcoreSupport_CustomStatus::CheckStatusRender($this)) // Plesk12
         {
@@ -15,7 +15,7 @@ class DebugController extends pm_Controller_Action
             $this->view->status = new Modules_JxcoreSupport_CustomStatus($this->view);
         }
 
-        $this->after = $this->getEnvVars();
+//        $this->after = $this->getEnvVars();
 
         $this->view->pageTitle = 'JXcore Plesk Extension for Node';
 
@@ -59,14 +59,14 @@ class DebugController extends pm_Controller_Action
     {
         $form = new pm_Form_Simple();
 
-        $this->showEnvVars($form, $this->before);
-        $this->showEnvVars($form, $this->after);
-        $this->showEnvVars($form, $this->getEnvVars());
+//        $this->showEnvVars($form, $this->before);
+//        $this->showEnvVars($form, $this->after);
+//        $this->showEnvVars($form, $this->getEnvVars());
 //        $this->domainList($form);
 //        $this->showClient($form);
 //        $this->showRootsCrontab($form);
 
-
+        $this->basicDebug($form);
 
 
 //        Modules_JxcoreSupport_Common::addHR($form);
@@ -93,9 +93,9 @@ class DebugController extends pm_Controller_Action
 
         $this->view->form = $form;
 
-        $this->_status->addMessage("info", "Some message");
-        $this->_status->addMessage("warning", "Some warning");
-        $this->_status->addMessage("error", "Some error");
+//        $this->_status->addMessage("info", "Some message");
+//        $this->_status->addMessage("warning", "Some warning");
+//        $this->_status->addMessage("error", "Some error");
 
 
 //        Modules_JxcoreSupport_Common::reloadNginx();
@@ -245,6 +245,22 @@ something
     }
 
 
+    private function basicDebug(&$form) {
+
+        $this->addText($form, "phpversion", phpversion());
+
+        $exists = class_exists(pm_ProductInfo);
+        if ($exists)
+            $ver = pm_ProductInfo::getVersion();
+        else
+            $ver = "no support for pm_ProductInfo::getVersion()";
+//        } catch (Exception $ex) {
+//            $ver = "no support for pm_ProductInfo::getVersion()";
+//        }
+
+        $this->addText($form, "class_exists pm_ProductInfo", class_exists(pm_ProductInfo));
+        $this->addText($form, "pm_ProductInfo::getVersion()", $ver);
+    }
 
 }
 
