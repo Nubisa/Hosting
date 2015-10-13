@@ -39,7 +39,7 @@ class DomainController extends pm_Controller_Action
         $this->ID = $this->getRequest()->getParam('id');
         if (!ctype_digit($this->ID)) unset($this->ID);
 
-        if (!$this->ID) {
+        if (!isset($this->ID)) {
             $this->ID = pm_Settings::get("currentDomainId" . pm_Session::getClient()->getId());
 
             if (!$this->ID)
