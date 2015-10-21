@@ -571,10 +571,9 @@ class IndexController extends pm_Controller_Action
             return '<a href="' . $url . '">' . $str . '</a>';
         }
 
-        $client = pm_Session::getClient();
-        $clid = $client->getId();
 
         $data = array();
+        $col_count = 8;
         $ids = Modules_JxcoreSupport_Common::getDomainsIDs();
         foreach ($ids as $id) {
             $domain = Modules_JxcoreSupport_Common::getDomain($id);
@@ -584,9 +583,12 @@ class IndexController extends pm_Controller_Action
                 continue;
             }
 
-            if (!Modules_JxcoreSupport_Common::$isAdmin && $clid != $domain->row['cl_id']) {
+//            if (!Modules_JxcoreSupport_Common::$isAdmin && $clid != $domain->row['cl_id']) {
+//                continue;
+//            }
+
+            if (!Modules_JxcoreSupport_Common::hasAccessToDomain($domain))
                 continue;
-            }
 
             $domain->getAppPathOrDefault(false, true);
             $domain->getAppPortOrDefault(true, false);
@@ -597,7 +599,6 @@ class IndexController extends pm_Controller_Action
 
             $baseUrl = pm_Context::getBaseUrl() . 'index.php/domain/';
             $editUrl = $baseUrl . 'config/id/' . $id;
-            $col_count = 8;
 
             if ($sub->JXcoreSupportEnabled()) {
                 $data[] = array(
@@ -872,7 +873,7 @@ class IndexController extends pm_Controller_Action
         $varDir = pm_Context::getVarDir();
 
         $zip = $varDir . $osInfo->basename . ".zip";
-        $file = fopen($url, 'r');
+        $file = @fopen($url, 'r');
         if (!$file)
             return array("Cannot download file {$url}. Please check the internet connection or whether this platform is supported or not. ", null);
 

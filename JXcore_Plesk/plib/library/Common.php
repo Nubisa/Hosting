@@ -110,6 +110,9 @@ class Modules_JxcoreSupport_Common
     private static $domains = array();
     private static $domainsFetched = false;
 
+    private static $smbUsers = array();
+    private static $smbUsersFetched = false;
+
     private static $monitorJSON = null;
     private static $monitorJSONFetched = false;
 
@@ -150,15 +153,73 @@ class Modules_JxcoreSupport_Common
     public static function getDomainsIDsForLoggedClient () {
         self::getDomains();
 
-        $client = pm_Session::getClient();
-        $clid = $client->getId();
         $ids = array();
         foreach(self::$domains as $id=>$domain) {
-            if ($clid == $domain->row['cl_id']) {
+            if (self::hasAccessToDomain($domain)) {
                 $ids[] = $id;
             }
         }
         return $ids;
+    }
+
+    private static function getSmbUsers() {
+        if (!self::$smbUsersFetched) {
+
+            $smbUserId = self::getCurrentSmbUserId();
+            if ($smbUserId === null) {
+                // no need to load the data if $smbUserId is unknown
+                self::$smbUsersFetched = true;
+                return;
+            }
+
+            self::$smbUsers = array();
+            $dbAdapter = pm_Bootstrap::getDbAdapter();
+            $sql = "SELECT * FROM smb_users order by id ASC";
+
+            $statement = $dbAdapter->query($sql);
+            while ($row = $statement->fetch()) {
+                self::$smbUsers[intval($row['id'])] = $row;
+            }
+            self::$smbUsersFetched = true;
+        }
+        return self::$smbUsers;
+    }
+
+    private static function getCurrentSmbUserId() {
+
+        if (!isset($_SESSION['auth']) || !isset($_SESSION['auth']['smbUserId']))
+            return null;
+
+        return intval($_SESSION['auth']['smbUserId']);
+    }
+
+    // this is implemented of smb users, for which  $client->hasAccessToDomain() is not working properly
+    public static function hasAccessToDomain($domain) {
+
+        if (!$domain) return false;
+        if (self::$isAdmin) return true;
+
+        self::getSmbUsers();
+        $smbUserId = self::getCurrentSmbUserId();
+        $client = pm_Session::getClient();
+
+        $clid = $client->getId();
+        if ($clid == $domain->row['cl_id']) {
+
+            // extra check against smb users (aliases of clients)
+            // supported only in Plesk 12
+            if ($smbUserId !== null && isset(self::$smbUsers[$smbUserId])) {
+                $id_ = self::$smbUsers[$smbUserId]['subscriptionDomainId'];
+                $id_ = intval($id_);
+
+                if ($id_ !== 0 && $id_ != $domain->id)
+                    return false;
+            }
+
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -1847,8 +1908,6 @@ class DomainInfo
 
 class PanelClient
 {
-
-    public $sysUser = null;
     public $panelLogin = null;
     public $type = null;
     public $whoami = null;
@@ -1862,12 +1921,17 @@ class PanelClient
             $clientId = $client->getId();
         }
 
-        $this->whoami = shell_exec("whoami");
+        $this->isImpersonated = pm_Session::isImpersonated();
+        $this->getImpersonatedClientId = pm_Session::getImpersonatedClientId();
+        $this->whoami = trim(shell_exec("whoami"));
+        $this->isAdmin = $client->isAdmin();
+        $this->isReseller = $client->isReseller();
+        $this->isClient = $client->isClient();
 
         $dbAdapter = pm_Bootstrap::getDbAdapter();
 
 
-        $sql = "SELECT
+        $sql = "SELECT *,
             cli.login as cliLogin, cli.type as cliType
             FROM clients cli
             where cli.id = $clientId";
@@ -1876,12 +1940,15 @@ class PanelClient
 
         $row = $statement->fetch();
 
+//        var_dump($client);
 
-
-        $this->sysUser = $row["sysLogin"];
+//        $this->sysUser = $row["sysLogin"];
         $this->panelLogin = $row["cliLogin"];
         $this->type = $row["cliType"];
-        $this->statusBar = "Client Id: {$clientId}, Username: <b>{$this->panelLogin}</b>. Account type: <b>{$this->type}</b>. Whoami: <b>{$this->whoami}</b>. System user: <b>{$this->sysUser}</b><hr>";
+//        $this->statusBar = "Client Id: {$clientId}, Username: <b>{$this->panelLogin}</b>. Account type: <b>{$this->type}</b>. Whoami: <b>{$this->whoami}</b>.<hr>";
+
+//        StatusMessage::addDebug($this->statusBar);
+        print_r($this);
     }
 }
 
