@@ -129,7 +129,7 @@ var srv = https.createServer(options, function (req, res) {
 
             var answer = "OK";
             try {
-                var cmd = "cd " + jxconfig.globalModulePath + "; '" + process.execPath + "' install " + nameAndVersion;
+                var cmd = "cd " + jxconfig.globalModulePath + "; '" + process.execPath + "' install " + nameAndVersion + ' --no-bin-links';
                 //console.log("Installing npm module. name:", name, "version:", version, "with cmd: ", cmd);
 
                 var ret = jxcore.utils.cmdSync(cmd);
@@ -143,6 +143,12 @@ var srv = https.createServer(options, function (req, res) {
                 var ok = ret1.out.toString().indexOf("─ " + nameAndVersion) !== -1;
 
                 answer = ok ? "OK" : "Error. " + ret.out;
+
+                if (ok) {
+                    // chmod 755 (others only read and execute)
+                    ret = root_functions.chmodSyncRecursive(expectedModulePath);
+                    answer = ret.err ? "Error. " + ret.err : "OK";
+                }
 
                 if (!ok)
                     root_functions.rmdirSync(expectedModulePath);

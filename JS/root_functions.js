@@ -179,3 +179,45 @@ exports.saveNginxConfigFileForDomain = function(options, onlyForTest) {
 
 
 };
+
+
+
+exports.chmodSyncRecursive = function(dir) {
+
+    if (!fs.existsSync(dir))
+        return { err : 'Cannot chmod ' + dir + '. Folder does not exists.'};
+
+    var files = fs.readdirSync(dir);
+
+    try {
+        // for directories, others only read and execute
+        fs.chmodSync(dir, '0755');
+    } catch(ex) {
+        return { err : 'Cannot chmod ' + dir + '. ' + ex };
+    }
+
+    var ret = true;
+
+    for(var o in files) {
+        if (!files.hasOwnProperty(o))
+            continue;
+
+        var _path = path.join(dir, files[o]);
+        var stat = fs.statSync(_path);
+
+        if (stat.isDirectory()) {
+            var ret1 = exports.chmodSyncRecursive(_path);
+            if (ret1.err)
+                ret = ret1;
+        } else {
+            // for files, others only read
+            try {
+                fs.chmodSync(_path, '0644');
+            } catch(ex) {
+                // ignore file permission errors for now
+            }
+        }
+    }
+
+    return ret;
+};
