@@ -56,7 +56,7 @@ class DomainController extends pm_Controller_Action
     private function setError($err) {
         $this->view->err = $err;
         $this->view->breadCrumb = "";
-        $this->view->tabs = "";
+        $this->view->tabs = array();
         return false;
     }
 
