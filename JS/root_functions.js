@@ -78,12 +78,13 @@ exports.rmdirSync = function (fullDir) {
 };
 
 
-exports.getUID = function(username) {
+exports.getUID = function(username, group) {
     if (process.platform === "win32") {
         return null;
     }
 
-    var ret = jxcore.utils.cmdSync("id -g " + username);
+    var flag = group ? '-g' : '-u';
+    var ret = jxcore.utils.cmdSync("id " + flag + " " + username);
     var uid = parseInt(ret.out);
     if (isNaN(uid)) {
         return null;
