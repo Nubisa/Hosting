@@ -6,6 +6,7 @@ class SubscriptionController extends pm_Controller_Action
 {
     private $domain = null;
     private $subscription = null;
+    private $loggedUser = null;
 
     public function init()
     {
@@ -21,6 +22,7 @@ class SubscriptionController extends pm_Controller_Action
         $this->view->pageTitle = 'JXcore - subscription configuration';
 
         $this->common = new Modules_JxcoreSupport_Common($this, $this->_status);
+        $this->loggedUser = PanelClient::getLogged();
 
         $this->ID = $this->getRequest()->getParam('id');
         if (!ctype_digit($this->ID)) unset($this->ID);
@@ -56,7 +58,7 @@ class SubscriptionController extends pm_Controller_Action
         if (!Modules_JxcoreSupport_Common::isJXValid())
             return $this->setError("Access denied. JXcore is not installed.");
 
-        if (!Modules_JxcoreSupport_Common::$isAdmin)
+        if (!$this->loggedUser->hasAccessToSubscription($this->subscription))
             return $this->setError("Access denied.");
 
         if (!$this->subscription)

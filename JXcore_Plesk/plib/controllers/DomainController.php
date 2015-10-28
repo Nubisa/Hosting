@@ -6,6 +6,7 @@
 class DomainController extends pm_Controller_Action
 {
     private $domain = null;
+    private $loggedUser = null;
 
     public function init()
     {
@@ -35,18 +36,19 @@ class DomainController extends pm_Controller_Action
         );
 
         $this->common = new Modules_JxcoreSupport_Common($this, $this->_status);
+        $this->loggedUser = PanelClient::getLogged();
 
         $this->ID = $this->getRequest()->getParam('id');
         if (!ctype_digit($this->ID)) unset($this->ID);
 
         if (!isset($this->ID)) {
-            $this->ID = pm_Settings::get("currentDomainId" . pm_Session::getClient()->getId());
+            $this->ID = pm_Settings::get("currentDomainId" . $this->loggedUser->id);
 
             if (!$this->ID)
                 return $this->setError("Unknown domain ID");
 
         } else {
-            pm_Settings::set("currentDomainId" . pm_Session::getClient()->getId(), $this->ID);
+            pm_Settings::set("currentDomainId" . $this->loggedUser->id, $this->ID);
         }
 
         $this->domain = Modules_JxcoreSupport_Common::getDomain(intval($this->ID));
@@ -71,8 +73,8 @@ class DomainController extends pm_Controller_Action
             return $this->setError("Access denied. JXcore is not installed.");
 
         // user can edit only his own domains
-        if (!Modules_JxcoreSupport_Common::$isAdmin) {
-            $ids = Modules_JxcoreSupport_Common::getDomainsIDsForLoggedClient();
+        if (!$this->loggedUser->isAdmin) {
+            $ids =  $this->loggedUser->getAvailableDomains();
             if (!in_array($this->ID, $ids))
                 return $this->setError("Access denied.");
         }

@@ -7,6 +7,7 @@ class IndexController extends pm_Controller_Action
     private $varDir = null;
     private $jxDir = null;
     private $jxFileName = null;
+    private $loggedUser = null;
 
     public function init()
     {
@@ -21,9 +22,9 @@ class IndexController extends pm_Controller_Action
         $this->view->pageTitle = 'JXcore Plesk Extension for Node';
 
         $this->common = new Modules_JxcoreSupport_Common($this, $this->_status);
+        $this->loggedUser = PanelClient::getLogged();
 
-        if (Modules_JxcoreSupport_Common::$isAdmin) {
-
+        if ($this->loggedUser->isAdmin) {
             $this->view->tabs = array(
                 array(
                     'title' => 'Welcome',
@@ -48,6 +49,19 @@ class IndexController extends pm_Controller_Action
             );
         }
 
+        if ($this->loggedUser->isAdminRestricted) {
+            $this->view->tabs = array(
+                array(
+                    'title' => 'Domains',
+                    'action' => 'listdomains',
+                ),
+                array(
+                    'title' => 'Subscriptions',
+                    'action' => 'listsubscriptions'
+                )
+            );
+        }
+
         // starting from 0.2.7 we will use static dir for jx
         // no need to keep platform specific dir, e.g. /.../jx_ub32v8/
         // let it be /.../jxcore/
@@ -63,15 +77,18 @@ class IndexController extends pm_Controller_Action
      * @param bool $onlyAdminIsAllowed
      * @return bool
      */
-    private function redirect($onlyAdminIsAllowed = false)
+    private function redirect($onlyAdminIsAllowed = false, $allowAlsoRestrictedAdmin = false)
     {
         if (Modules_JxcoreSupport_Common::$firstRun || !Modules_JxcoreSupport_Common::isJXValid()) {
-            $tab = Modules_JxcoreSupport_Common::$isAdmin ? 'init' : 'initNonAdmin';
+            $tab = $this->loggedUser->isAdmin ? 'init' : 'initNonAdmin';
             $this->_forward($tab);
             return true;
         }
 
-        if ($onlyAdminIsAllowed && !Modules_JxcoreSupport_Common::$isAdmin) {
+        if ($allowAlsoRestrictedAdmin && $this->loggedUser->isAdminRestricted)
+            return false;
+
+        if ($onlyAdminIsAllowed && !$this->loggedUser->isAdmin) {
             $this->_forward('listdomains');
             return true;
         }
@@ -465,7 +482,9 @@ class IndexController extends pm_Controller_Action
                 Modules_JxcoreSupport_Common::callService("remove", $nameToRemove, "Module #arg# was successfully removed.", "Cannot remove #arg# module.");
             } else
             if ($nameToInstall) {
-                Modules_JxcoreSupport_Common::callService("install", $nameToInstall, "Module #arg# was successfully installed.", "Cannot install #arg# module.");
+                $many = strpos($nameToInstall, " ") !== false;
+                $str_ok = $many ? "Modules were successfully installed." :  "Module was successfully installed.";
+                Modules_JxcoreSupport_Common::callService("install", $nameToInstall, $str_ok, "There were some errors. See on the modules list below.");
             }
 
             $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlJXcoreModules));
@@ -587,7 +606,7 @@ class IndexController extends pm_Controller_Action
 //                continue;
 //            }
 
-            if (!Modules_JxcoreSupport_Common::hasAccessToDomain($domain))
+            if (!$this->loggedUser->hasAccessToDomain($domain))
                 continue;
 
             $domain->getAppPathOrDefault(false, true);
@@ -697,7 +716,7 @@ class IndexController extends pm_Controller_Action
      */
     public function listsubscriptionsAction()
     {
-        if ($this->redirect(true)) return;
+        if ($this->redirect(true, true)) return;
 
 
         $form = new pm_Form_Simple();
@@ -719,7 +738,8 @@ class IndexController extends pm_Controller_Action
                 $ids = SubscriptionInfo::getIds();
                 foreach($ids as $id) {
                     $sub = SubscriptionInfo::getSubscription($id);
-                    $sub->set(Modules_JxcoreSupport_Common::sidSubscriptionJXcoreEnabled, $do === "sub-enable" ? 1 : 0);
+                    if ($this->loggedUser->hasAccessToSubscription($sub))
+                        $sub->set(Modules_JxcoreSupport_Common::sidSubscriptionJXcoreEnabled, $do === "sub-enable" ? 1 : 0);
                 }
 
                 Modules_JxcoreSupport_Common::updateAllConfigsIfNeeded("nowait");
@@ -768,9 +788,6 @@ class IndexController extends pm_Controller_Action
             return '<a href="' . $url . '">' . $str . '</a>';
         }
 
-        $client = pm_Session::getClient();
-        $clid = $client->getId();
-
         $data = array();
 
         // fetching domain list
@@ -787,9 +804,8 @@ class IndexController extends pm_Controller_Action
                 continue;
             }
 
-            if (!Modules_JxcoreSupport_Common::$isAdmin && $clid != $sub->mainDomain->row['cl_id']) {
+            if (!$this->loggedUser->hasAccessToSubscription($sub))
                 continue;
-            }
 
             $baseUrl = pm_Context::getBaseUrl() . 'index.php/subscription/';
             $editUrl = $baseUrl . 'config/id/' . $id;

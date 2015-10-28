@@ -90,6 +90,7 @@ class Modules_JxcoreSupport_Common
 
     const iconON = '<img src="/theme/icons/16/plesk/on.png" style="vertical-align: middle; display: inline; margin-right: 7px;" height="16" width="16">';
     const iconOFF = '<img src="/theme/icons/16/plesk/off.png" style="vertical-align: middle; display: inline; margin-right: 7px;" height="16" width="16">';
+    const iconError = '<img src="/theme/icons/16/plesk/warning.png" style="vertical-align: middle; display: inline; margin-right: 7px;" height="16" width="16">';
 
     const iconUrlDelete = "/theme/icons/16/plesk/delete.png";
     const iconUrlReload = "/theme/icons/16/plesk/show-all.png";
@@ -110,9 +111,6 @@ class Modules_JxcoreSupport_Common
     private static $domains = array();
     private static $domainsFetched = false;
 
-    private static $smbUsers = array();
-    private static $smbUsersFetched = false;
-
     private static $monitorJSON = null;
     private static $monitorJSONFetched = false;
 
@@ -128,7 +126,7 @@ class Modules_JxcoreSupport_Common
         StatusMessage::$status = $status;
 
         $_class = get_class($controller);
-        $_clientId = pm_Session::getClient()->getId();
+        $_clientId = PanelClient::getLogged()->id;
 
         if ($_class !== 'DomainController')
             pm_Settings::set("currentDomainId" . $_clientId, "");
@@ -148,78 +146,6 @@ class Modules_JxcoreSupport_Common
     public static function getDomainsIDs () {
         self::getDomains();
         return array_keys(self::$domains);
-    }
-
-    public static function getDomainsIDsForLoggedClient () {
-        self::getDomains();
-
-        $ids = array();
-        foreach(self::$domains as $id=>$domain) {
-            if (self::hasAccessToDomain($domain)) {
-                $ids[] = $id;
-            }
-        }
-        return $ids;
-    }
-
-    private static function getSmbUsers() {
-        if (!self::$smbUsersFetched) {
-
-            $smbUserId = self::getCurrentSmbUserId();
-            if ($smbUserId === null) {
-                // no need to load the data if $smbUserId is unknown
-                self::$smbUsersFetched = true;
-                return;
-            }
-
-            self::$smbUsers = array();
-            $dbAdapter = pm_Bootstrap::getDbAdapter();
-            $sql = "SELECT * FROM smb_users order by id ASC";
-
-            $statement = $dbAdapter->query($sql);
-            while ($row = $statement->fetch()) {
-                self::$smbUsers[intval($row['id'])] = $row;
-            }
-            self::$smbUsersFetched = true;
-        }
-        return self::$smbUsers;
-    }
-
-    private static function getCurrentSmbUserId() {
-
-        if (!isset($_SESSION['auth']) || !isset($_SESSION['auth']['smbUserId']))
-            return null;
-
-        return intval($_SESSION['auth']['smbUserId']);
-    }
-
-    // this is implemented of smb users, for which  $client->hasAccessToDomain() is not working properly
-    public static function hasAccessToDomain($domain) {
-
-        if (!$domain) return false;
-        if (self::$isAdmin) return true;
-
-        self::getSmbUsers();
-        $smbUserId = self::getCurrentSmbUserId();
-        $client = pm_Session::getClient();
-
-        $clid = $client->getId();
-        if ($clid == $domain->row['cl_id']) {
-
-            // extra check against smb users (aliases of clients)
-            // supported only in Plesk 12
-            if ($smbUserId !== null && isset(self::$smbUsers[$smbUserId])) {
-                $id_ = self::$smbUsers[$smbUserId]['subscriptionDomainId'];
-                $id_ = intval($id_);
-
-                if ($id_ !== 0 && $id_ != $domain->id)
-                    return false;
-            }
-
-            return true;
-        }
-
-        return false;
     }
 
     /**
@@ -582,12 +508,8 @@ class Modules_JxcoreSupport_Common
             return;
         }
 
-        $clientId = null;
-        if (!self::$isAdmin) {
-            $client = pm_Session::getClient();
-            $clientId = $client->getId();
-        }
-
+        $logged = PanelClient::getLogged();
+        $clientId = $logged->isAdmin ? null : $logged->id;
         $takenPorts = Modules_JxcoreSupport_Common::getTakenAppPorts(null, $clientId);
         foreach ($takenPorts as $port) {
             if ($port < self::$minApplicationPort || $port > self::$maxApplicationPort) {
@@ -968,7 +890,7 @@ class Modules_JxcoreSupport_Common
 
             return $enabled;
         } else {
-            $str = self::$isAdmin ? $str . "." : "";
+            $str = PanelClient::getLogged()->isAdmin ? $str . "." : "";
             self::$status->addMessage("error", "Cannot fetch nginx status.{$str} Exit code: $ret.");
             return false;
         }
@@ -1912,7 +1834,14 @@ class PanelClient
     public $type = null;
     public $whoami = null;
     public $statusBar = null;
+    public $id = null;
+    public $smbUserId = null;
+    public $restrictedMainDomainId = null;
+    public $isAdmin = null;
+    public $isAdminRestricted = null;
 
+    private static $smbUsers = array();
+    private static $smbUsersFetched = false;
 
     function PanelClient($clientId = null)
     {
@@ -1921,10 +1850,16 @@ class PanelClient
             $clientId = $client->getId();
         }
 
+        $this->id = $clientId;
+        // leave this order
+        $this->smbUserId = self::getCurrentSmbUserId();
+        $this->restrictedMainDomainId = $this->getRestrictedMainDomainId();
+
         $this->isImpersonated = pm_Session::isImpersonated();
         $this->getImpersonatedClientId = pm_Session::getImpersonatedClientId();
         $this->whoami = trim(shell_exec("whoami"));
-        $this->isAdmin = $client->isAdmin();
+        $this->isAdminRestricted = $client->isAdmin() && $this->restrictedMainDomainId;
+        $this->isAdmin = $client->isAdmin() && !$this->restrictedMainDomainId;
         $this->isReseller = $client->isReseller();
         $this->isClient = $client->isClient();
 
@@ -1946,9 +1881,114 @@ class PanelClient
         $this->panelLogin = $row["cliLogin"];
         $this->type = $row["cliType"];
 //        $this->statusBar = "Client Id: {$clientId}, Username: <b>{$this->panelLogin}</b>. Account type: <b>{$this->type}</b>. Whoami: <b>{$this->whoami}</b>.<hr>";
+        $this->statusBar = "";
 
-//        StatusMessage::addDebug($this->statusBar);
-        print_r($this);
+        if ($this->isAdmin)
+            $this->statusBar = 'Logged as <b>admin</b>.<br>';
+        else if ($this->isAdminRestricted) {
+            $d = Modules_JxcoreSupport_Common::getDomain($this->restrictedMainDomainId);
+            $this->statusBar = 'Logged as <b>admin</b> with access limited only to ' . $d->name . '<br>';
+        }
+    }
+
+    private static function getCurrentSmbUserId() {
+
+        // plesk 12+
+        if (isset($_SESSION['auth']) && isset($_SESSION['auth']['smbUserId']))
+            return intval($_SESSION['auth']['smbUserId']);
+
+        // lower Plesk versions
+        $sid = session_id() . '_smb_user_id';
+        if (isset($_SESSION[$sid]))
+            return intval($_SESSION[$sid]);
+
+        return null;
+    }
+
+    private function getRestrictedMainDomainId() {
+
+        if (!$this->smbUserId)
+            return null;
+
+        PanelClient::getSmbUsers();
+
+        if (isset(PanelClient::$smbUsers[$this->smbUserId]) && PanelClient::$smbUsers[$this->smbUserId]['subscriptionDomainId'])
+            return intval(PanelClient::$smbUsers[$this->smbUserId]['subscriptionDomainId']);
+
+        return null;
+    }
+
+
+    // this is implemented of smb users, for which  $client->hasAccessToDomain() is not working properly
+    public function hasAccessToDomain($domain) {
+
+        if (!$domain) return false;
+        if ($this->isAdmin) return true;
+
+        if (!$this->restrictedMainDomainId)
+            return $this->id == $domain->row['cl_id'];
+
+        //        StatusMessage::addDebug("subid $subId, ssid $sub->id, name $domain->name, webspacjeid $domain->webspaceId, submaindomainid $sub->mainDomainId");
+
+        // check subscription restriction
+        return $this->hasAccessToSubscription($domain->getSubscription());
+    }
+
+    public function hasAccessToSubscription($sub) {
+
+        if (!$sub) return false;
+        if ($this->isAdmin) return true;
+
+        return $sub && $sub->mainDomainId == $this->restrictedMainDomainId;
+    }
+
+    public function getAvailableDomains() {
+        // make sure domains are read from db
+        Modules_JxcoreSupport_Common::getDomainsIDs();
+
+        $domain_ids = Modules_JxcoreSupport_Common::getDomainsIDs();
+
+        $ids = array();
+        foreach($domain_ids as $id) {
+            $d = Modules_JxcoreSupport_Common::getDomain($id);
+            if (self::hasAccessToDomain($d)) {
+                $ids[] = $id;
+            }
+        }
+
+        return $ids;
+    }
+
+    private static function getSmbUsers() {
+        if (!self::$smbUsersFetched) {
+
+            $smbUserId = self::getCurrentSmbUserId();
+            if ($smbUserId === null) {
+                // no need to load the data if $smbUserId is unknown
+                self::$smbUsersFetched = true;
+                return;
+            }
+
+            self::$smbUsers = array();
+            $dbAdapter = pm_Bootstrap::getDbAdapter();
+            $sql = "SELECT * FROM smb_users order by id ASC";
+
+            $statement = $dbAdapter->query($sql);
+            while ($row = $statement->fetch()) {
+                self::$smbUsers[intval($row['id'])] = $row;
+            }
+            self::$smbUsersFetched = true;
+        }
+        return self::$smbUsers;
+    }
+
+    public static $logged = null;
+
+    public static function getLogged() {
+        if (!PanelClient::$logged)
+            PanelClient::$logged = new PanelClient();
+
+        return PanelClient::$logged;
     }
 }
 
@@ -1997,7 +2037,7 @@ class JXconfig {
         // allowSysExec: bool
         // allowLocalNativeModules: bool
 
-        $canEdit = Modules_JxcoreSupport_Common::$isAdmin;
+        $canEdit = PanelClient::getLogged()->isAdmin;
 
         Modules_JxcoreSupport_Common::addHR($form);
 
@@ -2306,7 +2346,7 @@ class SubscriptionInfo {
         foreach($ids as $id) {
             $domain = Modules_JxcoreSupport_Common::getDomain($id);
             // first condition applies to main domain of the subscription
-            // second conditin applies to all other domains of the subscription
+            // second condition applies to all other domains of the subscription
             if ($this->mainDomainId == $id  || $this->mainDomainId == $domain->webspaceId) {
                 $ret[$domain->id] = $domain;
             }
