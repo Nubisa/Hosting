@@ -37,6 +37,14 @@ class DomainController extends pm_Controller_Action
 
         $this->common = new Modules_JxcoreSupport_Common($this, $this->_status);
         $this->loggedUser = PanelClient::getLogged();
+        $this->allowNPMInstall = $this->loggedUser->isAdmin || Modules_JxcoreSupport_Common::$allowNPMInstall;
+
+        if ($this->allowNPMInstall) {
+            array_push($this->view->tabs, array(
+                'title' => 'NPM Modules ',
+                'action' => 'listmodules',
+            ));
+        }
 
         $this->ID = $this->getRequest()->getParam('id');
         if (!ctype_digit($this->ID)) unset($this->ID);
@@ -563,6 +571,32 @@ class DomainController extends pm_Controller_Action
         }
 
         $this->view->form = $form;
+    }
+
+    public function listmodulesAction()
+    {
+        if (!$this->check())
+            return;
+
+        if (!$this->allowNPMInstall)
+            return;
+
+        $form = new pm_Form_Simple();
+        $this->view->list = new pm_View_List_Simple($this->view, $this->_request);
+
+        new NPMModules($form, $this->view->list, $this->view, $this->_helper, $this->getRequest(), $this->domain);
+    }
+
+    public function listmodulesDataAction()
+    {
+        if (!$this->check())
+            return;
+
+        if (!$this->allowNPMInstall)
+            return;
+
+        $this->listmodulesAction();
+        $this->_helper->json($this->view->list->fetchData());
     }
 }
 

@@ -5,9 +5,11 @@
 </style>
 
 <?php echo $this->messages; ?>
-<?php echo $this->userStatusBar; ?>
+<?php echo $this->breadCrumb . "<hr><br>" ?>
+<?php echo $this->err; ?>
 <?php if ($this->tabs) echo $this->renderTabs($this->tabs); ?>
 <?php if ($this->logDiv) echo $this->logDiv; ?>
 <?php echo $this->buttonsDisablingScript; ?>
 <?php echo $this->form; ?>
 <?php if ($this->list) echo $this->renderList($this->list); ?>
+

@@ -27,6 +27,7 @@ class Modules_JxcoreSupport_Common
     public static $urlDomainConfig = "";
     public static $urlDomainAppLog = "";
     public static $urlDomainRestartManager = "";
+    public static $urlDomainModules = "";
 
     public static $firstRun = false;
 
@@ -84,6 +85,7 @@ class Modules_JxcoreSupport_Common
 
     const sidJXcoreMinimumPortNumber = "jx_app_min_port";
     const sidJXcoreMaximumPortNumber = "jx_app_max_port";
+    const sidJXcoreAllowNPMInstall = "jx_app_allow_npm_install";
 
     const sidMonitorStartScheduledByCron = "jx_monitor_start_scheduled_by_cron";
     const sidMonitorStartScheduledByCronAction = "jx_monitor_start_scheduled_by_cron_action";
@@ -101,6 +103,7 @@ class Modules_JxcoreSupport_Common
 
     public static $minApplicationPort = self::minApplicationPort_default;
     public static $maxApplicationPort = self::maxApplicationPort_default;
+    public static $allowNPMInstall = false;
 
     private static $hrId = 0;
     private static $controller = null;
@@ -191,6 +194,7 @@ class Modules_JxcoreSupport_Common
         self::$urlDomainConfig = $baseUrl . "index.php/domain/config";
         self::$urlDomainAppLog = $baseUrl . "index.php/domain/log";
         self::$urlDomainRestartManager = $baseUrl . "index.php/domain/restartmanager";
+        self::$urlDomainModules = $baseUrl . "index.php/domain/listmodules";
 
         self::$firstRun = !pm_Settings::get(self::sidFirstRun); // if empty, that it is first run
 
@@ -207,6 +211,8 @@ class Modules_JxcoreSupport_Common
 
         $v = pm_Settings::get(self::sidJXcoreMaximumPortNumber);
         self::$maxApplicationPort = $v ? $v : self::maxApplicationPort_default;
+
+        self::$allowNPMInstall = pm_Settings::get(Modules_JxcoreSupport_Common::sidJXcoreAllowNPMInstall);
 
         self::$dirNativeModules = $varDir . "native_modules/";
         self::$dirAppsConfigs = $varDir . "app_configs/";
@@ -793,7 +799,7 @@ class Modules_JxcoreSupport_Common
         } else {
             // list
             $btnstyle = "style='height: 15px; margin-left: 20px; $style $additionalStyle'";
-            $onclick = "href=\"$url\"";
+            $onclick = strpos($url, "js:", 0) === false ? "href=\"$url\"" : "onclick=\"$url\"";
         }
 
         $id = "jx-btn-{$varName}-" . count(self::$buttonsDisabling);
@@ -1877,7 +1883,6 @@ class PanelClient
 
 //        var_dump($client);
 
-//        $this->sysUser = $row["sysLogin"];
         $this->panelLogin = $row["cliLogin"];
         $this->type = $row["cliType"];
 //        $this->statusBar = "Client Id: {$clientId}, Username: <b>{$this->panelLogin}</b>. Account type: <b>{$this->type}</b>. Whoami: <b>{$this->whoami}</b>.<hr>";
@@ -1982,7 +1987,7 @@ class PanelClient
         return self::$smbUsers;
     }
 
-    public static $logged = null;
+    private static $logged = null;
 
     public static function getLogged() {
         if (!PanelClient::$logged)
@@ -2371,13 +2376,13 @@ class StatusMessage {
 
     public static function addWarning($txt) {
         if (!self::$status) return;
-        $txt = str_replace("\n", "<br>", $txt);
+        $txt = str_replace("\n", "<br>", "$txt");
         self::$status->addMessage('warning', $txt);
     }
 
     public static function addDebug($txt) {
         if (!self::$status) return;
-        $txt = str_replace("\n", "<br>", $txt);
+        $txt = str_replace("\n", "<br>", "$txt");
         self::$status->addMessage('warning', $txt);
     }
 
@@ -2393,6 +2398,10 @@ class StatusMessage {
 
     public static function orange($txt) {
         return '<span style="color: orangered;">' . $txt . '</span>';
+    }
+
+    public static function green($txt) {
+        return '<span style="color: green;">' . $txt . '</span>';
     }
 }
 
@@ -2538,5 +2547,355 @@ class JXcoreOSInfo {
             JXcoreOSInfo::$info = new JXcoreOSInfo();
 
         return JXcoreOSInfo::$info;
+    }
+}
+
+
+class NPMModules {
+
+    private $dir_base = null;
+    private $dir_node_modules = null;
+
+    private function check(&$form, &$list, &$view, $helper, $req, $domain) {
+        $errStr = null;
+        if (!$form) $errStr = 'form';
+        if (!$list) $errStr = 'list';
+        if (!$view) $errStr = 'view';
+        if (!$helper) $errStr = 'helper';
+        if (!$req) $errStr = 'req';
+
+        if ($errStr) {
+            StatusMessage::addWarning("The $errStr object is null");
+            return false;
+        }
+
+        $logged = PanelClient::getLogged();
+        if (!$logged->isAdmin && !$domain) {
+            StatusMessage::addWarning("Wrong call for non-admin user.");
+                return false;
+        }
+
+        return true;
+    }
+
+    function NPMModules(&$form, &$list, &$view, $helper, $req, $domain = null) {
+
+        if (!$this->check($form, $list, $view, $helper, $req, $domain))
+            return;
+
+        $this->dir_base = $domain ? $domain->rootFolder : Modules_JxcoreSupport_Common::$dirNativeModules;
+        $this->dir_node_modules = $this->dir_base . "node_modules/";
+        $nameToInstall = trim($req->getParam("names"));
+        $npmlog = $this->dir_base . "npm-debug.log";
+
+        // if domain is not provided this is an admin anyway
+        $sysUser = $domain ? $domain->sysUser : 'psaadm';
+        $uri = "&user=$sysUser&dir={$this->dir_base}";
+
+        if (file_exists($npmlog)) {
+
+            $logCommand = trim($req->getParam("logCommand"));
+            if ($logCommand === 'remove') {
+                Modules_JxcoreSupport_Common::callService("modules", "removeLog{$uri}", "The npm-debug.log was successfully removed.", "Cannot remove npm-debug.log file.");
+            } else {
+                $view->logDiv = $this->getLogDiv($npmlog);
+//                $btnRemove = Modules_JxcoreSupport_Common::getSimpleButton("logCommand", "Remove", "remove", Modules_JxcoreSupport_Common::iconUrlDelete, null, $style);
+            }
+        }
+
+        $form->addElement('hidden', "moduleAction", array('value' => 'nothing'));
+        $form->addElement('hidden', 'logCommand', array('value' => 'nothing'));
+        $form->addElement('hidden', 'remove', array('value' => 'nothing'));
+        $form->addElement('hidden', 'update', array('value' => 'nothing'));
+
+        $form->addElement('text', "names", array(
+            'label' => 'Install new module',
+            'value' => $nameToInstall,
+            'validators' => array(new MyValid_Module()),
+            'filters' => array('StringTrim'),
+            'description' => 'Name or names of NPM module to install, e.g. "jxm server@5.0.3"',
+            'escape' => false,
+            'size' => 80
+        ));
+
+        $form->addElement('simpleText', 'path', array(
+            'label' => 'Path',
+            'escape' => false,
+            'value' => $this->dir_node_modules
+        ));
+
+        $form->addControlButtons(array(
+            'cancelLink' => null,
+            'hideLegend' => true
+        ));
+
+        if ($req->isPost() && $form->isValid($req->getPost())) {
+
+            $view->status->beforeRedirect = true;
+
+            $moduleAction = trim($req->getParam("moduleAction"));
+            $nameToRemove = trim($req->getParam("remove"));
+            $nameToUpdate = trim($req->getParam("update"));
+
+            if ($moduleAction === "check_for_updates") {
+                Modules_JxcoreSupport_Common::callService("modules", "checkForUpdates$uri", "Check for update completed. See details on table list below.", "Error while checking for update.");
+            } else
+            if ($moduleAction === "update_all") {
+                Modules_JxcoreSupport_Common::callService("modules", "update&name=all{$uri}", "Modules was successfully updated.", "There were some errors.");
+            } else
+            if ($nameToRemove !== "nothing") {
+                Modules_JxcoreSupport_Common::callService("remove", $nameToRemove . $uri, "Module was successfully removed.", "Cannot remove module.");
+            }
+            else
+            if ($nameToUpdate !== "nothing") {
+                Modules_JxcoreSupport_Common::callService("modules", "update&name={$nameToUpdate}{$uri}", "Module was successfully updated.", "Cannot update module.");
+            } else
+            if ($nameToInstall) {
+                $many = strpos($nameToInstall, " ") !== false;
+                $str_ok = $many ? "Modules were successfully installed." :  "Module was successfully installed.";
+                $str_err = "There were some errors. See below for details.";
+                $ret = Modules_JxcoreSupport_Common::callService("install", $nameToInstall . $uri , $str_ok, $str_err, "silent");
+                StatusMessage::infoOrError($ret !== "OK", $str_ok, $str_err);
+            }
+
+            $helper->json(array('redirect' => $domain ? Modules_JxcoreSupport_Common::$urlDomainModules : Modules_JxcoreSupport_Common::$urlJXcoreModules));
+        }
+
+        $view->buttonsDisablingScript = Modules_JxcoreSupport_Common::getButtonsDisablingScript();
+        $view->form = $form;
+        $rows = $this->setData($list, $uri);
+
+        if (count($rows)) {
+            $btn = Modules_JxcoreSupport_Common::getSimpleButton("moduleAction", "Check for updates", "check_for_updates", "/theme/icons/16/plesk/question.png", null, "margin-left: 0px");
+            $btn .= Modules_JxcoreSupport_Common::getSimpleButton("moduleAction", "Update all", "update_all", "/theme/icons/16/plesk/update.png", null, "margin-left: 0px");
+            $view->form .= "<br>$btn";
+        }
+
+    }
+
+
+    private function setData(&$list, $uri) {
+
+        $data = array();
+        $info = Modules_JxcoreSupport_Common::callService("modules", "info{$uri}", null, null, true);
+
+        if ($info === "OK")
+            return;
+
+        if (strpos($info, '|') === false)
+            StatusMessage::addError('Cannot read modules list: ' . $info);
+
+        $modules = explode("||", $info);
+        foreach($modules as $str) {
+            $parsed = explode("|", $str);
+            if (count($parsed) == 4) {
+                $modules[$parsed[0] . "_version"] = $parsed[1];
+                $modules[$parsed[0] . "_update_info"] = $parsed[2];
+                $modules[$parsed[0] . "_description"] = $parsed[3];
+            }
+        }
+
+        if (file_exists($this->dir_node_modules)) {
+            $d = dir($this->dir_node_modules);
+            while (false !== ($entry = $d->read())) {
+                if (substr($entry, 0, 1) !== "." && is_dir($this->dir_node_modules . $entry)) {
+
+                    $ver = isset($modules[$entry . "_version"]) ? $modules[$entry . "_version"] : "Cannot read version";
+                    $desc = isset($modules[$entry . "_description"]) ? $modules[$entry . "_description"] : "Cannot read description";
+                    $update = isset($modules[$entry . "_update_info"]) ? $modules[$entry . "_update_info"] : "Cannot read update info";
+
+                    if (strpos($update, "#") === 0) {
+                        $update = str_replace("#", "", $update);
+                        $update = Modules_JxcoreSupport_Common::getSimpleButton("update", $update, "$entry", "/theme/icons/16/plesk/update.png", null, "margin: 0px;");
+                    }
+
+                    $data[] = array(
+                        'column-1' => Modules_JxcoreSupport_Common::iconON,
+                        'column-2' => $entry,
+                        'column-3' => $ver,
+                        'column-4' => $desc,
+                        'column-5' => Modules_JxcoreSupport_Common::getSimpleButton("remove", "Remove", "$entry", null, null, "margin: 0px;"),
+                        'column-6' => $update
+                    );
+                }
+            }
+            $d->close();
+        }
+
+        $list->setData($data);
+        $columns = array(
+            'column-1' => array(
+                'title' => '',
+                'noEscape' => true,
+            ),
+            'column-2' => array(
+                'title' => 'Module name',
+                'noEscape' => true,
+            ),
+            'column-3' => array(
+                'title' => 'module version',
+                'noEscape' => true,
+            ),
+            'column-4' => array(
+                'title' => 'Description',
+                'noEscape' => true,
+            ),
+            'column-5' => array(
+                'title' => 'Remove',
+                'noEscape' => true,
+            ),
+            'column-6' => array(
+                'title' => 'Update',
+                'noEscape' => true,
+            )
+        );
+
+        $list->setColumns($columns);
+        $list->setDataUrl(array('action' => 'listdomains-data'));
+
+        return $data;
+    }
+
+
+    private function getLogDiv($npmlog) {
+
+        $html = '
+<div id="sites-active-list" class="active-list active-list-collapsible">
+    <div class="active-list-wrap">
+
+
+        <div id="active-list-item-npm-debug-log" class="active-list-item active-list-item-collapsible active-list-item-collapsed">
+            <div class="active-list-item-wrap">
+
+                <div class="caption">
+                    <div class="caption-wrap">
+                        <h4 class="panel-heading-name" style="margin: 10px;">
+                            <img alt="" src="/theme//icons/16/plesk/warning.png"
+                                 style="margin-right: 5px; margin-top: -3px;">
+                            <span>Expand to see the error log (<b>npm-debug.log</b>)</span>
+                        </h4>
+
+                        <div class="caption-control"><span class="caption-control-wrap" id="caption-control-npm-debug-log"><i></i></span></div>
+
+                    </div>
+                </div>
+
+                <div class="active-list-details">
+                    <div class="active-list-details-wrap">
+                        <div class="panel-content">
+                            <div class="panel-content-wrap">
+                                <div class="stat-block">
+                                    <div class="___stat-name">
+                                        File date:
+                                        <b>#file_date#</b>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="panel-content">
+                            <div class="panel-content-wrap">
+                                <div class="stat-block">
+                                    <div class="___stat-name">
+                                        Issued after command:
+                                        <b>#cmd#</b>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="panel-content">
+                            <div class="panel-content-wrap">
+                                #div#
+                            </div>
+                        </div>
+
+                        <div class="panel-content">
+                            <div class="panel-content-wrap">
+                                #remove_btn#
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+        ';
+
+        $log = trim(file_get_contents($npmlog));
+        $log = htmlspecialchars($log);
+        $arr = explode("\n", $log);
+        $len = count($arr);
+        $cmd = strpos($arr[$len-1], "jx install") === 0 ? trim($arr[$len-1]) : "unknown";
+
+        foreach($arr as $key => $line) {
+            if (strpos($line, ' error ') !== false) $arr[$key] = StatusMessage::orange($line);
+            if (strpos($line, ' info ') !== false) $arr[$key] = StatusMessage::green($line);
+        }
+
+        $log = implode('<br>', $arr);
+        $div = '
+            <div id="div_npmdebug" class="panels-group-wrap"
+                 style="height: 300px; overflow: scroll; margin-top: 10px; margin-bottom: 10px; padding: 0px">
+                #log#
+            </div>
+        ';
+        $div = str_replace("#log#", $log, $div);
+
+        $btnRemove = Modules_JxcoreSupport_Common::getSimpleButton("logCommand", "Remove log file", "remove", Modules_JxcoreSupport_Common::iconUrlDelete, null, "margin: 0px;");
+        $html = str_replace("#remove_btn#", $btnRemove, $html);
+        $html = str_replace("#div#", $div, $html);
+        $html = str_replace("#file_date#", date ("F d Y H:i:s.", filemtime($npmlog)), $html);
+        $html = str_replace("#cmd#", $cmd , $html);
+        return $html;
+    }
+}
+
+
+class MyValid_Module extends Zend_Validate_Abstract
+{
+    const MSG_CANNOTCONTAIN = 'msgCannotContain';
+    const MSG_CANNOTSTART = 'msgCannotStart';
+    const MSG_ISADIR = 'msgIsaDir';
+
+    public $cannotContain = 0;
+    public $cannotStart = 0;
+
+    protected $_messageVariables = array(
+        'cannotContain' => 'cannotContain',
+        'cannotStart' => 'cannotStart'
+    );
+
+    protected $_messageTemplates = array(
+        self::MSG_CANNOTCONTAIN => "The file name cannot contain '%cannotContain%'.",
+        self::MSG_CANNOTSTART => "The file name cannot start with a '%cannotStart%'.",
+        self::MSG_ISADIR => "Provided path exists and is a directory."
+    );
+
+    public function isValid($value)
+    {
+        $this->_setValue($value);
+
+        $forbidden = array( './', '/.', '.\\', '\\.'  );
+        foreach($forbidden as $str) {
+            if (strpos($value, $str) !== false) {
+                $this->cannotContain = $str;
+                $this->_error(self::MSG_CANNOTCONTAIN);
+                return false;
+            }
+        }
+
+        $forbidden = array( '/', '\\' );
+        foreach($forbidden as $str) {
+            if (substr($value, 0, strlen($str)) === $str) {
+                $this->cannotStart = $str;
+                $this->_error(self::MSG_CANNOTSTART);
+                return false;
+            }
+        }
+
+        return true;
     }
 }

@@ -390,6 +390,14 @@ class IndexController extends pm_Controller_Action
                     'escape' => false
                 ));
 
+                Modules_JxcoreSupport_Common::addHr($form);
+
+                $form->addElement('checkbox', Modules_JxcoreSupport_Common::sidJXcoreAllowNPMInstall, array(
+                    'label' => 'Allow users to install npm modules',
+                    'description' => "This will give the users possibility to install npm modules per each domain.",
+                    'value' => pm_Settings::get(Modules_JxcoreSupport_Common::sidJXcoreAllowNPMInstall)
+                ));
+
                 $form->addElement('simpleText', "restartmayoccur", array(
                     'label' => '',
                     'escape' => false,
@@ -419,7 +427,11 @@ class IndexController extends pm_Controller_Action
                 } else if ($installAction) {
                     $this->JXcoreInstallUninstall($req->getParam($sidJXcore));
                 } else {
-                    $params = array(Modules_JxcoreSupport_Common::sidJXcoreMinimumPortNumber, Modules_JxcoreSupport_Common::sidJXcoreMaximumPortNumber);
+                    $params = array(
+                        Modules_JxcoreSupport_Common::sidJXcoreMinimumPortNumber,
+                        Modules_JxcoreSupport_Common::sidJXcoreMaximumPortNumber,
+                        Modules_JxcoreSupport_Common::sidJXcoreAllowNPMInstall,
+                    );
 
                     $portsChanged = false;
                     foreach ($params as $param) {
@@ -451,53 +463,9 @@ class IndexController extends pm_Controller_Action
         if ($this->redirect(true)) return;
 
         $form = new pm_Form_Simple();
+        $this->view->list = new pm_View_List_Simple($this->view, $this->_request);
 
-
-        $form->addElement('hidden', "remove", array(
-            'label' => 'Installed modules',
-            'value' => ""
-        ));
-
-        $nameToInstall = trim($this->getRequest()->getParam("names"));
-        $form->addElement('text', "names", array(
-            'label' => 'Install new module',
-            'value' => $nameToInstall,
-            'validators' => array(new MyValid_Module()),
-            'filters' => array('StringTrim'),
-            'description' => 'Name of NPM module to install.',
-            'escape' => false
-        ));
-
-        $form->addControlButtons(array(
-            'cancelLink' => null,
-            'hideLegend' => true
-        ));
-
-        if ($this->getRequest()->isPost() && $form->isValid($this->getRequest()->getPost())) {
-
-            $this->view->status->beforeRedirect = true;
-
-            $nameToRemove = trim($this->getRequest()->getParam("remove"));
-            if ($nameToRemove) {
-                Modules_JxcoreSupport_Common::callService("remove", $nameToRemove, "Module #arg# was successfully removed.", "Cannot remove #arg# module.");
-            } else
-            if ($nameToInstall) {
-                $many = strpos($nameToInstall, " ") !== false;
-                $str_ok = $many ? "Modules were successfully installed." :  "Module was successfully installed.";
-                Modules_JxcoreSupport_Common::callService("install", $nameToInstall, $str_ok, "There were some errors. See on the modules list below.");
-            }
-
-            $this->_helper->json(array('redirect' => Modules_JxcoreSupport_Common::$urlJXcoreModules));
-        }
-
-        $this->view->buttonsDisablingScript = Modules_JxcoreSupport_Common::getButtonsDisablingScript();
-        $this->view->form = $form;
-
-        $this->view->list = $this->getModulesList();
-        if ($this->view->list) {
-            $this->view->list->setDataUrl(array('action' => 'listmodules-data'));
-        }
-
+        new NPMModules($form, $this->view->list, $this->view, $this->_helper, $this->getRequest());
         Modules_JxcoreSupport_Common::check();
     }
 
@@ -509,74 +477,6 @@ class IndexController extends pm_Controller_Action
         $this->_helper->json($this->view->list->fetchData());
         Modules_JxcoreSupport_Common::check();
     }
-
-    private function getModulesList() {
-        $list = new pm_View_List_Simple($this->view, $this->_request);
-
-        $data = array();
-        $info = Modules_JxcoreSupport_Common::callService("modules", "info", null, null, true);
-
-        $modules = explode("||", $info);
-        foreach($modules as $str) {
-            $parsed = explode("|", $str);
-            if (count($parsed) == 3) {
-                $modules[$parsed[0] . "_version"] = $parsed[1];
-                $modules[$parsed[0] . "_description"] = $parsed[2];
-            }
-        }
-
-        $node_modules = Modules_JxcoreSupport_Common::$dirNativeModules . "node_modules/";
-        if (file_exists($node_modules)) {
-            $d = dir($node_modules);
-            while (false !== ($entry = $d->read())) {
-                if (substr($entry, 0, 1) !== "." && is_dir($node_modules . $entry)) {
-
-                    $ver = isset($modules[$entry . "_version"]) ? $modules[$entry . "_version"] : "Cannot read version";
-                    $desc = isset($modules[$entry . "_description"]) ? $modules[$entry . "_description"] : "Cannot read description";
-
-                    $data[] = array(
-                        'column-1' => Modules_JxcoreSupport_Common::iconON,
-                        'column-2' => $entry,
-                        'column-3' => $ver,
-                        'column-4' => $desc,
-                        'column-5' => Modules_JxcoreSupport_Common::getSimpleButton("remove", "Remove", "$entry", null, null, "margin: 0px;")
-                    );
-                }
-            }
-            $d->close();
-        }
-
-        $list->setData($data);
-        $columns = array(
-            'column-1' => array(
-                'title' => '',
-                'noEscape' => true,
-            ),
-            'column-2' => array(
-                'title' => 'Module name',
-                'noEscape' => true,
-            ),
-            'column-3' => array(
-                'title' => 'module version',
-                'noEscape' => true,
-            ),
-            'column-4' => array(
-                'title' => 'Description',
-                'noEscape' => true,
-            ),
-            'column-5' => array(
-                'title' => '',
-                'noEscape' => true,
-            )
-        );
-
-        $list->setColumns($columns);
-        $list->setDataUrl(array('action' => 'listdomains-data'));
-        return $list;
-    }
-
-
-
 
     private function _getDomains()
     {
@@ -1100,53 +1000,6 @@ class MyValid_PortMax extends Zend_Validate_Abstract
         if ($value - $this->newMinimum + 1 < $this->domainCount) {
             $this->_error(self::MSG_TOOLITTLE);
             return false;
-        }
-
-        return true;
-    }
-}
-
-
-class MyValid_Module extends Zend_Validate_Abstract
-{
-    const MSG_CANNOTCONTAIN = 'msgCannotContain';
-    const MSG_CANNOTSTART = 'msgCannotStart';
-    const MSG_ISADIR = 'msgIsaDir';
-
-    public $cannotContain = 0;
-    public $cannotStart = 0;
-
-    protected $_messageVariables = array(
-        'cannotContain' => 'cannotContain',
-        'cannotStart' => 'cannotStart'
-    );
-
-    protected $_messageTemplates = array(
-        self::MSG_CANNOTCONTAIN => "The file name cannot contain '%cannotContain%'.",
-        self::MSG_CANNOTSTART => "The file name cannot start with a '%cannotStart%'.",
-        self::MSG_ISADIR => "Provided path exists and is a directory."
-    );
-
-    public function isValid($value)
-    {
-        $this->_setValue($value);
-
-        $forbidden = array( './', '/.', '.\\', '\\.'  );
-        foreach($forbidden as $str) {
-            if (strpos($value, $str) !== false) {
-                $this->cannotContain = $str;
-                $this->_error(self::MSG_CANNOTCONTAIN);
-                return false;
-            }
-        }
-
-        $forbidden = array( '/', '\\' );
-        foreach($forbidden as $str) {
-            if (substr($value, 0, strlen($str)) === $str) {
-                $this->cannotStart = $str;
-                $this->_error(self::MSG_CANNOTSTART);
-                return false;
-            }
         }
 
         return true;
