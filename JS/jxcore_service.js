@@ -8,12 +8,19 @@ var path = require('path');
 var https = require("https");
 var http = require("http");
 var url = require("url");
+var util = require("util");
 var root_functions = require("./root_functions.js");
+var semver = require('semver');
 
+var npmModulesLatestVersions = {};
 
 process.title = "jx service";
 var jxconfig = root_functions.readJXconfig();
-var psaadm_uid = root_functions.getUID("psaadm");
+var psaadm = 'psaadm';
+var psaadm_uid = root_functions.getUID(psaadm);
+var psaadm_gid = root_functions.getUID(psaadm, true);
+var modulesDir = path.normalize(jxconfig.globalModulePath + "/node_modules/");
+
 var errors = [];
 
 if (!psaadm_uid) {
@@ -117,98 +124,20 @@ var srv = https.createServer(options, function (req, res) {
 //        fs.writeFileSync("/tmp/parsed.txt", JSON.stringify(parsed, null, 4));
         fs.unlinkSync(fname);
 
-        if (parsed.query.install) {
-            var nameAndVersion = parsed.query.install;
-            var name = nameAndVersion;
-            var version = "";
-            var pos = nameAndVersion.indexOf("@");
-            if (pos > -1) {
-                var name = nameAndVersion.slice(0, pos).trim();
-                var version = nameAndVersion.slice(pos + 1).trim();
-            }
+        var method = null;
+        if (parsed.query.install) method = npmModules_install;
+        if (parsed.query.modules == "info") method = npmModules_list;
+        if (parsed.query.remove) method = npmModules_remove;
+        if (parsed.query.modules == "removeLog") method = npmModules_removeLog;
+        if (parsed.query.modules == "checkForUpdates") method = npmModules_checkForUpdates;
+        if (parsed.query.modules == "update") method = npmModules_update;
 
-            var answer = "OK";
-            try {
-                var cmd = "cd " + jxconfig.globalModulePath + "; '" + process.execPath + "' install " + nameAndVersion + ' --no-bin-links';
-                //console.log("Installing npm module. name:", name, "version:", version, "with cmd: ", cmd);
-
-                var ret = jxcore.utils.cmdSync(cmd);
-
-                var expectedModulePath = path.join(jxconfig.globalModulePath, "/node_modules/", name);
-//            var answer = fs.existsSync(expectedModulePath) ? "OK" : "Error. " + ret.out;
-
-                // now testing if it's installed
-                var cmd = "cd " + jxconfig.globalModulePath + "; '" + process.execPath + "' install -ls --depth=0";
-                var ret1 = jxcore.utils.cmdSync(cmd);
-                var ok = ret1.out.toString().indexOf("─ " + nameAndVersion) !== -1;
-
-                answer = ok ? "OK" : "Error. " + ret.out;
-
-                if (ok) {
-                    // chmod 755 (others only read and execute)
-                    ret = root_functions.chmodSyncRecursive(expectedModulePath);
-                    answer = ret.err ? "Error. " + ret.err : "OK";
-                }
-
-                if (!ok)
-                    root_functions.rmdirSync(expectedModulePath);
-            } catch(ex) {
-                answer = ex.toString()
-            }
-
-            writeAnswer(res, answer);
+        if (method) {
+            method(parsed, function(err, txt) {
+                writeAnswer(res, err || (txt || 'OK'));
+            });
             return;
         }
-
-        if (parsed.query.remove) {
-
-            var answer = "OK";
-            try {
-                var modulesDir = path.normalize(jxconfig.globalModulePath + "/node_modules/" + parsed.query.remove);
-
-                var ok = true;
-                if (fs.existsSync(modulesDir)) {
-                    ok = root_functions.rmdirSync(modulesDir);
-                }
-                answer = ok ? "OK" : "Could not remove the folder.";
-            } catch (ex) {
-                answer = ex.toString()
-            }
-
-            writeAnswer(res, answer);
-            return;
-        }
-
-        if (parsed.query.modules && parsed.query.modules == "info") {
-
-            var answer = "OK";
-            try {
-                var modulesDir = path.normalize(jxconfig.globalModulePath + "/node_modules/");
-                var folders = fs.readdirSync(modulesDir);
-
-                var ret = [];
-                for (var a = 0, len = folders.length; a < len; a++) {
-                    if (folders[a].slice(0, 1) !== ".") {
-                        var file = path.join(modulesDir, "/", folders[a], "/package.json");
-
-                        try {
-                            if (fs.existsSync(file)) {
-                                var json = JSON.parse(fs.readFileSync(file));
-                                ret.push(folders[a] + "|" + json.version + "|" + json.description);
-                            }
-                        } catch (ex) {
-                        }
-                    }
-                }
-                answer = ret.join("||");
-            } catch (ex) {
-                answer = ex.toString();
-            }
-
-            writeAnswer(res, answer);
-            return;
-        }
-
 
         if (parsed.query.nginx) {
             var cmd = null;
@@ -401,3 +330,340 @@ try {
 } catch (ex) {
     console.log("Cannot require ./nginxWatch.js", ex);
 }
+
+
+var npmModules_check = function (parsed, checkModuleName) {
+
+//    console.log(parsed);
+    var ret = {};
+
+    // here the node_modules will be created
+    ret.baseDir = parsed.query.dir;
+    if (!ret.baseDir || !fs.existsSync(ret.baseDir))
+        return { err: 'Wrong directory.'};
+
+    ret.userName = parsed.query.user;
+    if (!ret.userName || !root_functions.getUID(ret.userName))
+        return { err: 'Wrong user name.'};
+
+    ret.moduleName = parsed.query.name;
+    if (checkModuleName && !ret.moduleName)
+        return { err: 'Wrong module name.'};
+
+    ret.modulesDir = path.join(ret.baseDir, 'node_modules');
+
+    // extra check
+    if (ret.userName !== psaadm && ret.modulesDir === modulesDir)
+        return { err: 'Access denied for user.'};
+
+    return ret;
+};
+
+var npmModules_install = function (parsed, cb) {
+
+    var errorAnswer = null;
+    try {
+        var namesToInstall = parsed.query.install.toString().replace(/ -g/gi, '').replace(/ --global/gi, '');
+
+        var ret = npmModules_check(parsed);
+        if (ret.err)
+            return cb(ret.err);
+
+        if (!fs.existsSync(ret.modulesDir))
+            fs.mkdirSync(ret.modulesDir);
+
+        root_functions.chownSyncRecursive(ret.modulesDir, ret.userName);
+
+        var npmlog = path.join(ret.baseDir, 'npm-debug.log');
+        if (fs.existsSync(npmlog))
+            fs.unlinkSync(npmlog);
+
+        var cmd = util.format('cd "%s"; "%s" install %s --no-bin-links', ret.baseDir, process.execPath, namesToInstall);
+//        console.log("Installing npm module. name:", parsed.query.install, "namesToInstall:", namesToInstall, "with cmd: ", cmd);
+        var cmdResult = jxcore.utils.cmdSync(cmd);
+
+        // chmod + chown for installed modules
+        var files = fs.readdirSync(ret.modulesDir);
+
+        for (var a = 0, len = files.length; a < len; a++) {
+            var _mod = path.join(ret.modulesDir, files[a]);
+            var _stat = fs.statSync(_mod);
+//            console.log(_mod, _stat.isDirectory());
+            if (!_stat.isDirectory())
+                continue;
+
+            root_functions.chownSyncRecursive(_mod, ret.userName, _stat);
+
+            var _mark = path.join(_mod, '_jx_chmoded');
+            if (!fs.existsSync(_mark)) {
+                try {
+                    root_functions.chmodSyncRecursive(_mod);
+                    fs.writeFileSync(_mod, 'ok');
+                } catch (ex) {
+                    // ignore chmod errors for now
+                }
+            }
+        }
+
+        if (fs.existsSync(npmlog)) {
+            fs.appendFileSync(npmlog, "\njx install " + namesToInstall + "\n");
+            fs.chownSync(npmlog, root_functions.getUID(psaadm), root_functions.getUID(psaadm, true));
+            errorAnswer = "Error" + cmdResult.out;
+        }
+
+        npmModules_checkForUpdates(parsed);
+
+    } catch (ex) {
+        errorAnswer = ex.toString();
+    }
+
+    cb(errorAnswer);
+};
+
+
+var npmModules_list = function (parsed, cb) {
+
+    var errorAnswer = null;
+    try {
+
+        var ret = npmModules_check(parsed);
+        if (ret.err)
+            return cb(ret.err);
+
+        // no error. panel will print empty list
+        if (!fs.existsSync(ret.modulesDir))
+            return cb(null, "OK");
+
+        var folders = fs.readdirSync(ret.modulesDir);
+
+        var arr = [];
+        for (var a = 0, len = folders.length; a < len; a++) {
+            if (folders[a].slice(0, 1) !== ".") {
+                var file = path.join(ret.modulesDir, folders[a], "package.json");
+
+                try {
+                    if (fs.existsSync(file)) {
+                        var json = JSON.parse(fs.readFileSync(file));
+                        var info = npmModulesLatestVersions[folders[a]] || "Check for updates";
+                        arr.push(folders[a] + "|" + json.version + "|" + info + "|" + json.description);
+                    } else {
+
+                    }
+                } catch (ex) {
+                }
+            }
+        }
+    } catch (ex) {
+        errorAnswer = ex.toString();
+    }
+
+    cb(errorAnswer, arr && arr.join("||"));
+};
+
+
+var npmModules_remove = function (parsed, cb) {
+
+    var errorAnswer = null;
+    try {
+
+        var ret = npmModules_check(parsed);
+        if (ret.err)
+            return cb(ret.err);
+
+        var _dir = path.join(ret.modulesDir, parsed.query.remove);
+        if (fs.existsSync(_dir))
+            root_functions.rmdirSync(_dir);
+
+        if (fs.existsSync(_dir))
+            errorAnswer = "Could not remove the folder.";
+
+        npmModules_checkForUpdates(parsed);
+    } catch (ex) {
+        errorAnswer = ex.toString()
+    }
+
+    cb(errorAnswer);
+};
+
+var npmModules_removeLog = function (parsed, cb) {
+
+    var errorAnswer = null;
+    try {
+
+        var ret = npmModules_check(parsed);
+        if (ret.err)
+            return cb(ret.err);
+
+        var file = path.join(ret.baseDir, 'npm-debug.log');
+        if (fs.existsSync(file))
+            fs.unlinkSync(file);
+
+        if (fs.existsSync(file))
+            errorAnswer = "Could not remove the file.";
+
+    } catch (ex) {
+        errorAnswer = ex.toString()
+    }
+
+    cb(errorAnswer);
+};
+
+
+var npmModules_checkForUpdates = function (parsed, cb) {
+
+    var errorAnswer = null;
+    try {
+
+        var ret = npmModules_check(parsed);
+        if (ret.err)
+            return cb ? cb(ret.err) : null;
+
+        // no error. just no modules.
+        if (!fs.existsSync(ret.modulesDir))
+            return cb ? cb(null, "OK") : null;
+
+        var folders = fs.readdirSync(ret.modulesDir);
+
+        npmModulesLatestVersions.__checking_in_progress = true;
+        for (var a = 0, len = folders.length; a < len; a++) {
+            if (folders[a].slice(0, 1) !== ".") {
+                var dir = path.join(ret.modulesDir, folders[a]);
+                var _stat = fs.statSync(dir);
+                if (!_stat.isDirectory())
+                    continue;
+
+                var file = path.join(dir, "package.json");
+
+                try {
+                    if (fs.existsSync(file)) {
+                        var json = JSON.parse(fs.readFileSync(file));
+
+                        var cmd = util.format('cd "%s"; "%s" npm view %s version --loglevel silent', ret.baseDir, process.execPath, folders[a]);
+                        var cmdResult = jxcore.utils.cmdSync(cmd);
+
+                        var v = cmdResult.out.trim();
+//                        console.log("Check for update:", folders[a],
+//                            "\ncmd:", cmd,
+//                            "\nver: ", ">" + v + "<",
+//                            "\njson ver: ", ">" + json.version + "<",
+//                            "\nsemver valid:", semver.valid(v)
+//                            "\nlt", semver.lt(json.version, v),
+//                            "\ngt", semver.gt(json.version, v)
+//                        );
+                        var info = null;
+                        if (!semver.valid(v)) {
+                            info = "Invalid remote version"
+                        } else {
+                            if (semver.lt(json.version, v)) {
+                                info = "#Update to " + v;
+                            }
+                            if (semver.gt(json.version, v)) {
+                                info = "This is newer"
+                            } else if (json.version === v) {
+                                info = "This is the latest";
+                            }
+                        }
+
+                        if (!info)
+                            info = util.format("Could not compare %s vs %s", json.version, v);
+
+                        npmModulesLatestVersions[folders[a]] = info;
+                    }
+                } catch (ex) {
+                    console.log("exception", ex);
+                }
+            }
+        }
+        npmModulesLatestVersions.__lastCheck = Date.now();
+        npmModulesLatestVersions.__checking_in_progress = false;
+
+    } catch (ex) {
+        errorAnswer = ex.toString()
+    }
+
+    if (cb) cb(errorAnswer);
+};
+
+var npmModules_update = function (parsed, cb) {
+
+    var errorAnswer = null;
+    try {
+        var ret = npmModules_check(parsed, true);
+        if (ret.err)
+            return cb(ret.err);
+
+        if (!fs.existsSync(ret.modulesDir))
+            return cb("OK");
+
+        var nameForUpdate = parsed.query.name;
+        if (nameForUpdate === "all") nameForUpdate = "";
+
+        root_functions.chownSyncRecursive(ret.modulesDir, ret.userName);
+
+        var npmlog = path.join(ret.baseDir, 'npm-debug.log');
+        if (fs.existsSync(npmlog))
+            fs.unlinkSync(npmlog);
+
+        var cmd = util.format('cd "%s"; "%s" npm update %s --no-bin-links', ret.baseDir, process.execPath, nameForUpdate);
+        var cmdResult = jxcore.utils.cmdSync(cmd);
+        console.log("Updating npm module. name:", nameForUpdate, "with cmd: ", cmd);
+        console.log(cmdResult);
+
+        // chmod + chown for installed modules
+        var files = fs.readdirSync(ret.modulesDir);
+
+        for (var a = 0, len = files.length; a < len; a++) {
+            var _mod = path.join(ret.modulesDir, files[a]);
+            var _stat = fs.statSync(_mod);
+//            console.log(_mod, _stat.isDirectory());
+            if (!_stat.isDirectory())
+                continue;
+
+            root_functions.chownSyncRecursive(_mod, ret.userName, _stat);
+
+            var _mark = path.join(_mod, '_jx_chmoded');
+            if (!fs.existsSync(_mark)) {
+                try {
+                    root_functions.chmodSyncRecursive(_mod);
+                    fs.writeFileSync(_mod, 'ok');
+                } catch (ex) {
+                    // ignore chmod errors for now
+                }
+            }
+        }
+
+        if (fs.existsSync(npmlog)) {
+            fs.appendFileSync(npmlog, "\njx update " + namesToInstall + "\n");
+            fs.chownSync(npmlog, root_functions.getUID(psaadm), root_functions.getUID(psaadm, true));
+            errorAnswer = "Error" + cmdResult.out;
+        } else {
+            if (cmdResult.exitCode)
+                errorAnswer = cmdResult.out;
+        }
+
+        npmModules_checkForUpdates(parsed);
+
+    } catch (ex) {
+        errorAnswer = ex.toString();
+    }
+
+    cb(errorAnswer);
+};
+
+
+
+// 30 minutes
+var keepAlive = 30 * 1000 * 60;
+var cleanNpmModulesLatestVersions = function () {
+
+    if (npmModulesLatestVersions.__checking_in_progress || !npmModulesLatestVersions.__lastCheck)
+        return;
+
+    if (Date.now() - npmModulesLatestVersions.__lastCheck < keepAlive)
+        return;
+
+    npmModulesLatestVersions = {};
+};
+
+
+setInterval(cleanNpmModulesLatestVersions, 5 * 1000 * 60)
