@@ -78,12 +78,12 @@ exports.rmdirSync = function (fullDir) {
 };
 
 
-exports.getUID = function(username, group) {
+exports.getUID = function(username, forGroup) {
     if (process.platform === "win32") {
         return null;
     }
 
-    var flag = group ? '-g' : '-u';
+    var flag = forGroup ? '-g' : '-u';
     var ret = jxcore.utils.cmdSync("id " + flag + " " + username);
     var uid = parseInt(ret.out);
     if (isNaN(uid)) {
@@ -92,6 +92,18 @@ exports.getUID = function(username, group) {
         return uid;
     }
 };
+
+// returns group name form the user
+exports.getIdName = function(username, forGroup) {
+    if (process.platform === "win32") {
+        return null;
+    }
+
+    var flag = forGroup ? '-g' : '-u';
+    var ret = jxcore.utils.cmdSync("id " + flag + " -n " + username);
+    return ret.out ? ret.out.trim() : null;
+};
+
 
 // parses args string into array with proper quoted values, e.g.: s1 s2="s s" s3='test '
 exports.parseUserArgs = function(args_str) {
@@ -221,4 +233,36 @@ exports.chmodSyncRecursive = function(dir) {
     }
 
     return ret;
+};
+
+
+exports.argvStringToArray = function (argvString) {
+
+    var cmd = '"' + process.execPath + '" -e "console.log(JSON.stringify(process.argv.slice(1)))" ' + argvString;
+    var ret = jxcore.utils.cmdSync(cmd);
+    try {
+        if (ret.out) return JSON.parse(ret.out.trim());
+    } catch (ex) {
+        return { err: ex };
+    }
+    return {err: 'No output' };
+};
+
+
+exports.chownSyncRecursive = function (dir, user, stat) {
+    if (fs.existsSync(dir)) {
+        var _stat = stat || fs.statSync(dir);
+        var uid = exports.getUID(user);
+        var group = exports.getIdName(user, true);
+//        console.log('user', user, 'uid', uid, 'stat.uid', _stat.uid, 'group', group);
+        if (_stat.uid !== uid) {
+            var cmd = 'chown -R ' + user + ':' + group + ' "' + dir + '"';
+            var ret = jxcore.utils.cmdSync(cmd);
+            if (ret.exitCode) {
+//                console.log('Cannot set chown for user %s on %s', user, _mod);
+                return {err: ret.out};
+            }
+        }
+    }
+    return true;
 };
