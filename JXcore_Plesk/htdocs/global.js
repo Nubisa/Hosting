@@ -17,3 +17,31 @@ if(!window.__addMessage){
       }
     };
 }
+
+
+// hide/show npm-debug.log panel (on NPM Modules tab)
+if (Jsw) {
+    Jsw.onReady(function() {
+
+        $$('#caption-control-npm-debug-log').each(function(element) {
+
+            $(element).on("click", function(e) {
+                e.preventDefault();
+
+                $$('#active-list-item-npm-debug-log').each(function(element2) {
+
+                    var item = $(element2);
+                    var cl = element2.className;
+
+                    if (element.__visible === true) {
+                        element.__visible = false;
+                        element2.className = cl.replace('active-list-item-expanded', 'active-list-item-collapsed');
+                    } else {
+                        element.__visible = true;
+                        element2.className = cl.replace('active-list-item-collapsed', 'active-list-item-expanded');
+                    }
+                });
+            });
+        });
+    });
+}
