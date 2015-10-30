@@ -97,9 +97,8 @@ class Modules_JxcoreSupport_CustomStatus
     }
 
     public static function CheckStatusRender($_this){
-        $api12 = class_exists('pm_ProductInfo');
 
-        if (!$api12)
+        if (!Modules_JxcoreSupport_Common::$plesk12)
             return false; // version below 12, no need for workaround
 
         // now there is api12
