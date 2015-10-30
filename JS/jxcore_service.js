@@ -125,9 +125,9 @@ var srv = https.createServer(options, function (req, res) {
         fs.unlinkSync(fname);
 
         var method = null;
-        if (parsed.query.install) method = npmModules_install;
+        if (parsed.query.modules == "install") method = npmModules_install;
         if (parsed.query.modules == "info") method = npmModules_list;
-        if (parsed.query.remove) method = npmModules_remove;
+        if (parsed.query.modules == "remove") method = npmModules_remove;
         if (parsed.query.modules == "removeLog") method = npmModules_removeLog;
         if (parsed.query.modules == "checkForUpdates") method = npmModules_checkForUpdates;
         if (parsed.query.modules == "update") method = npmModules_update;
@@ -363,11 +363,11 @@ var npmModules_install = function (parsed, cb) {
 
     var errorAnswer = null;
     try {
-        var namesToInstall = parsed.query.install.toString().replace(/ -g/gi, '').replace(/ --global/gi, '');
-
-        var ret = npmModules_check(parsed);
+        var ret = npmModules_check(parsed, true);
         if (ret.err)
             return cb(ret.err);
+
+        var namesToInstall = parsed.query.name.toString().replace(/ -g/gi, '').replace(/ --global/gi, '');
 
         if (!fs.existsSync(ret.modulesDir))
             fs.mkdirSync(ret.modulesDir);
@@ -379,7 +379,7 @@ var npmModules_install = function (parsed, cb) {
             fs.unlinkSync(npmlog);
 
         var cmd = util.format('cd "%s"; "%s" install %s --no-bin-links', ret.baseDir, process.execPath, namesToInstall);
-//        console.log("Installing npm module. name:", parsed.query.install, "namesToInstall:", namesToInstall, "with cmd: ", cmd);
+//        console.log("Installing npm module. name:", parsed.query.name, "namesToInstall:", namesToInstall, "with cmd: ", cmd, "\n");
         var cmdResult = jxcore.utils.cmdSync(cmd);
 
         // chmod + chown for installed modules
@@ -410,9 +410,7 @@ var npmModules_install = function (parsed, cb) {
             fs.chownSync(npmlog, root_functions.getUID(psaadm), root_functions.getUID(psaadm, true));
             errorAnswer = "Error" + cmdResult.out;
         }
-
         npmModules_checkForUpdates(parsed);
-
     } catch (ex) {
         errorAnswer = ex.toString();
     }
@@ -466,18 +464,23 @@ var npmModules_remove = function (parsed, cb) {
     var errorAnswer = null;
     try {
 
-        var ret = npmModules_check(parsed);
+        var ret = npmModules_check(parsed, true);
         if (ret.err)
             return cb(ret.err);
 
-        var _dir = path.join(ret.modulesDir, parsed.query.remove);
+        var nameToRemove = parsed.query.name;
+        var all = nameToRemove === "_all_";
+
+        var _dir = all ? ret.modulesDir : path.join(ret.modulesDir, nameToRemove);
         if (fs.existsSync(_dir))
             root_functions.rmdirSync(_dir);
 
         if (fs.existsSync(_dir))
             errorAnswer = "Could not remove the folder.";
 
-        npmModules_checkForUpdates(parsed);
+        if (!all)
+            npmModules_checkForUpdates(parsed);
+
     } catch (ex) {
         errorAnswer = ex.toString()
     }
@@ -523,6 +526,12 @@ var npmModules_checkForUpdates = function (parsed, cb) {
             return cb ? cb(null, "OK") : null;
 
         var folders = fs.readdirSync(ret.modulesDir);
+
+        var npmlog = path.join(ret.baseDir, 'npm-debug.log');
+        var npmlog_backup = path.join(ret.baseDir, 'npm-debug.log.backup');
+        // backing up npm-debug.log
+        if (fs.existsSync(npmlog))
+            fs.renameSync(npmlog, npmlog_backup);
 
         npmModulesLatestVersions.__checking_in_progress = true;
         for (var a = 0, len = folders.length; a < len; a++) {
@@ -581,6 +590,13 @@ var npmModules_checkForUpdates = function (parsed, cb) {
         errorAnswer = ex.toString()
     }
 
+    try {
+        // restoring from backup npm-debug.log
+        if (fs.existsSync(npmlog_backup))
+            fs.renameSync(npmlog_backup, npmlog);
+    } catch (ex) {
+    }
+
     if (cb) cb(errorAnswer);
 };
 
@@ -596,7 +612,7 @@ var npmModules_update = function (parsed, cb) {
             return cb("OK");
 
         var nameForUpdate = parsed.query.name;
-        if (nameForUpdate === "all") nameForUpdate = "";
+        if (nameForUpdate === "_all_") nameForUpdate = "";
 
         root_functions.chownSyncRecursive(ret.modulesDir, ret.userName);
 
