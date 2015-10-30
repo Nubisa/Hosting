@@ -108,6 +108,7 @@ class Modules_JxcoreSupport_Common
     private static $hrId = 0;
     private static $controller = null;
     public static $status = null;
+    public static $plesk12 = null;
 
     private static $buttonsDisabling = array();
 
@@ -213,6 +214,7 @@ class Modules_JxcoreSupport_Common
         self::$maxApplicationPort = $v ? $v : self::maxApplicationPort_default;
 
         self::$allowNPMInstall = pm_Settings::get(Modules_JxcoreSupport_Common::sidJXcoreAllowNPMInstall);
+        self::$plesk12 = class_exists('pm_ProductInfo');
 
         self::$dirNativeModules = $varDir . "native_modules/";
         self::$dirAppsConfigs = $varDir . "app_configs/";
@@ -971,8 +973,8 @@ class Modules_JxcoreSupport_Common
         $url = Modules_JxcoreSupport_Common::$urlService . "cmd?cuid=$uid";
 
         $ret = Modules_JxcoreSupport_Common::getURL($url, $out);
-        $out = htmlspecialchars($out);
-        $ok = str_replace("\n", "<br>", trim($out)) == "OK";
+        $out = trim(htmlspecialchars($out));
+        $ok = str_replace("\n", "<br>", "$out") == "OK";
         $err = $ret ? $out: "Cannot connect to JXcore service.";
         $msg = $ok ? $msgOK : ($msgErr ? "$msgErr $err" : null);
         if ($msg && $return !== "silent") {
@@ -1066,6 +1068,13 @@ class Modules_JxcoreSupport_Common
         @exec($cmd, $out, $ret);
 
         return !$ret ? join("", $out) : false;
+    }
+
+
+    public static function getHTMLTag($tagName, $strValue, $class = null, $style = null) {
+        $class = $class ? " class=\"$class\" " : "";
+        $style = $style ? " style=\"$style\" " : "";
+        return "<$tagName{$class}{$style}>$strValue</$tagName>";
     }
 }
 
@@ -2397,11 +2406,11 @@ class StatusMessage {
     }
 
     public static function orange($txt) {
-        return '<span style="color: orangered;">' . $txt . '</span>';
+        return '<span class="jxOrangeRed">' . $txt . '</span>';
     }
 
     public static function green($txt) {
-        return '<span style="color: green;">' . $txt . '</span>';
+        return '<span class="jxGreen">' . $txt . '</span>';
     }
 }
 
@@ -2641,10 +2650,13 @@ class NPMModules {
                 Modules_JxcoreSupport_Common::callService("modules", "checkForUpdates$uri", "Check for update completed. See details on table list below.", "Error while checking for update.");
             } else
             if ($moduleAction === "update_all") {
-                Modules_JxcoreSupport_Common::callService("modules", "update&name=all{$uri}", "Modules was successfully updated.", "There were some errors.");
+                Modules_JxcoreSupport_Common::callService("modules", "update&name=_all_{$uri}", "Modules was successfully updated.", "There were some errors.");
+            } else
+            if ($moduleAction === "remove_all") {
+                Modules_JxcoreSupport_Common::callService("modules", "remove&name=_all_{$uri}", "Modules was removed updated.", "There were some errors.");
             } else
             if ($nameToRemove !== "nothing") {
-                Modules_JxcoreSupport_Common::callService("remove", $nameToRemove . $uri, "Module was successfully removed.", "Cannot remove module.");
+                Modules_JxcoreSupport_Common::callService("modules", "remove&name={$nameToRemove}{$uri}", "Module was successfully removed.", "Cannot remove module.");
             }
             else
             if ($nameToUpdate !== "nothing") {
@@ -2654,8 +2666,9 @@ class NPMModules {
                 $many = strpos($nameToInstall, " ") !== false;
                 $str_ok = $many ? "Modules were successfully installed." :  "Module was successfully installed.";
                 $str_err = "There were some errors. See below for details.";
-                $ret = Modules_JxcoreSupport_Common::callService("install", $nameToInstall . $uri , $str_ok, $str_err, "silent");
-                StatusMessage::infoOrError($ret !== "OK", $str_ok, $str_err);
+                $ret = Modules_JxcoreSupport_Common::callService("modules", "install&name={$nameToInstall}{$uri}", $str_ok, $str_err, "silent");
+                if ($ret)
+                    StatusMessage::infoOrError($ret !== "OK", $str_ok, $str_err);
             }
 
             $helper->json(array('redirect' => $domain ? Modules_JxcoreSupport_Common::$urlDomainModules : Modules_JxcoreSupport_Common::$urlJXcoreModules));
@@ -2668,6 +2681,7 @@ class NPMModules {
         if (count($rows)) {
             $btn = Modules_JxcoreSupport_Common::getSimpleButton("moduleAction", "Check for updates", "check_for_updates", "/theme/icons/16/plesk/question.png", null, "margin-left: 0px");
             $btn .= Modules_JxcoreSupport_Common::getSimpleButton("moduleAction", "Update all", "update_all", "/theme/icons/16/plesk/update.png", null, "margin-left: 0px");
+            $btn .= Modules_JxcoreSupport_Common::getSimpleButton("moduleAction", "Remove all", "remove_all", "/theme/icons/16/plesk/delete.png", null, "margin-left: 0px", "Are you sure?");
             $view->form .= "<br>$btn";
         }
 
@@ -2678,6 +2692,8 @@ class NPMModules {
 
         $data = array();
         $info = Modules_JxcoreSupport_Common::callService("modules", "info{$uri}", null, null, true);
+        $iconUpdate = Modules_JxcoreSupport_Common::$plesk12 ? "" : "/theme/icons/16/plesk/update.png";
+        $iconRemove = Modules_JxcoreSupport_Common::$plesk12 ? "" : "/theme/icons/16/plesk/delete.png";
 
         if ($info === "OK")
             return;
@@ -2706,7 +2722,8 @@ class NPMModules {
 
                     if (strpos($update, "#") === 0) {
                         $update = str_replace("#", "", $update);
-                        $update = Modules_JxcoreSupport_Common::getSimpleButton("update", $update, "$entry", "/theme/icons/16/plesk/update.png", null, "margin: 0px;");
+                        $update = str_replace(" ", "&nbsp;", $update);
+                        $update = Modules_JxcoreSupport_Common::getSimpleButton("update", $update, "$entry", $iconUpdate, null, "margin: 0px;");
                     }
 
                     $data[] = array(
@@ -2714,7 +2731,7 @@ class NPMModules {
                         'column-2' => $entry,
                         'column-3' => $ver,
                         'column-4' => $desc,
-                        'column-5' => Modules_JxcoreSupport_Common::getSimpleButton("remove", "Remove", "$entry", null, null, "margin: 0px;"),
+                        'column-5' => Modules_JxcoreSupport_Common::getSimpleButton("remove", "Remove", "$entry", $iconRemove, null, "margin: 0px;"),
                         'column-6' => $update
                     );
                 }
@@ -2769,36 +2786,29 @@ class NPMModules {
 
                 <div class="caption">
                     <div class="caption-wrap">
-                        <h4 class="panel-heading-name" style="margin: 10px;">
+                        <div class="panel-heading-name" style="margin: 10px;">
                             <img alt="" src="/theme//icons/16/plesk/warning.png"
                                  style="margin-right: 5px; margin-top: -3px;">
-                            <span>Expand to see the error log (<b>npm-debug.log</b>)</span>
-                        </h4>
 
-                        <div class="caption-control"><span class="caption-control-wrap" id="caption-control-npm-debug-log"><i></i></span></div>
+                            <span>Expand to see </span><span class="jxOrangeRed">npm-debug.log</span>
+                            <span style="margin-right: 20px;"> (#file_date#) </span>
+                            <span>Failed command: </span><span class="jxOrangeRed">#cmd#</span>
+                            <span style="float: right; margin-top: -5px;">#remove_btn#</span>
+                        </div>
+
+                        <div class="caption-control" id="caption-control-npm-debug-log"><span class="caption-control-wrap"><i></i></span></div>
 
                     </div>
                 </div>
 
                 <div class="active-list-details">
                     <div class="active-list-details-wrap">
-                        <div class="panel-content">
-                            <div class="panel-content-wrap">
-                                <div class="stat-block">
-                                    <div class="___stat-name">
-                                        File date:
-                                        <b>#file_date#</b>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 
                         <div class="panel-content">
                             <div class="panel-content-wrap">
                                 <div class="stat-block">
                                     <div class="___stat-name">
-                                        Issued after command:
-                                        <b>#cmd#</b>
+
                                     </div>
                                 </div>
                             </div>
@@ -2833,6 +2843,7 @@ class NPMModules {
         foreach($arr as $key => $line) {
             if (strpos($line, ' error ') !== false) $arr[$key] = StatusMessage::orange($line);
             if (strpos($line, ' info ') !== false) $arr[$key] = StatusMessage::green($line);
+            if (strpos($line, ' silly ') !== false) $arr[$key] = Modules_JxcoreSupport_Common::getHTMLTag("span", $line, null, "color:darkgray");
         }
 
         $log = implode('<br>', $arr);
@@ -2844,10 +2855,10 @@ class NPMModules {
         ';
         $div = str_replace("#log#", $log, $div);
 
-        $btnRemove = Modules_JxcoreSupport_Common::getSimpleButton("logCommand", "Remove log file", "remove", Modules_JxcoreSupport_Common::iconUrlDelete, null, "margin: 0px;");
+        $btnRemove = Modules_JxcoreSupport_Common::getSimpleButton("logCommand", "Remove log file", "remove", Modules_JxcoreSupport_Common::iconUrlDelete, null, "margin: 0px;", "Are you sure? The file will be permanently removed.");
         $html = str_replace("#remove_btn#", $btnRemove, $html);
         $html = str_replace("#div#", $div, $html);
-        $html = str_replace("#file_date#", date ("F d Y H:i:s.", filemtime($npmlog)), $html);
+        $html = str_replace("#file_date#", date ("F d Y H:i:s", filemtime($npmlog)), $html);
         $html = str_replace("#cmd#", $cmd , $html);
         return $html;
     }
