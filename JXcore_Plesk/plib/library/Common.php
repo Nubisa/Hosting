@@ -127,7 +127,7 @@ class Modules_JxcoreSupport_Common
     {
         self::$controller = $controller;
         self::$status = $status;
-        StatusMessage::$status = $status;
+        StatusMessage::init($status);
 
         $_class = get_class($controller);
         $_clientId = PanelClient::getLogged()->id;
@@ -2376,33 +2376,50 @@ class SubscriptionInfo {
 
 
 class StatusMessage {
-    public static $status = null;
+    private static $status = null;
+    private static $osInfo = null;
+    private static $logFile = null;
+
+    public static function init(&$status) {
+        self::$status = $status;
+        self::$logFile = pm_Context::getVarDir() . 'debug.log';
+        // remove the file on first call
+        // this way it is always refreshed on tab/page refresh
+        if (file_exists(self::$logFile))
+            @unlink(self::$logFile);
+    }
+
+    private static function addMessage($type, $txt) {
+        self::save($txt);
+        if (!self::$status) return false;
+        $txt = str_replace("\n", "<br>", "$txt");
+        self::$status->addMessage($type, $txt);
+    }
+
+    private static function save($txt) {
+        self::$osInfo = JXcoreOSInfo::get();
+        if (!self::$osInfo->error && self::$osInfo->debug_log)
+            file_put_contents(self::$logFile, PHP_EOL . $txt, FILE_APPEND);
+    }
 
     public static function addError($err) {
-        if (!self::$status) return;
-        self::$status->addMessage('error', $err);
+        self::addMessage('error', $err);
     }
 
     public static function addWarning($txt) {
-        if (!self::$status) return;
-        $txt = str_replace("\n", "<br>", "$txt");
-        self::$status->addMessage('warning', $txt);
+        self::addMessage('warning', $txt);
     }
 
     public static function addDebug($txt) {
-        if (!self::$status) return;
-        $txt = str_replace("\n", "<br>", "$txt");
-        self::$status->addMessage('warning', $txt);
+        self::addMessage('warning', $txt);
     }
 
     public static function dataSavedOrNot($saved) {
-        if (!self::$status) return;
-        self::$status->addMessage('info', $saved ? 'Data was successfully saved.' : 'Nothing to save.');
+        self::addMessage('info', $saved ? 'Data was successfully saved.' : 'Nothing to save.');
     }
 
     public static function infoOrError($isError, $infoMsg, $errMsg) {
-        if (!self::$status) return;
-        self::$status->addMessage($isError ? 'error' : 'info', $isError ? $errMsg : $infoMsg);
+        self::addMessage($isError ? 'error' : 'info', $isError ? $errMsg : $infoMsg);
     }
 
     public static function orange($txt) {
@@ -2484,6 +2501,7 @@ class JXcoreOSInfo {
     public $error = null;
     public $basename = null;
     public $custom = false;
+    public $debug_log = false;
 
     private function determinePlatform() {
         $uname_s = strtolower(php_uname("s"));
@@ -2543,6 +2561,12 @@ class JXcoreOSInfo {
         } else {
             // 32 or 64
             $this->arch = PHP_INT_SIZE * 8;
+        }
+
+        if (isset($ini_array["debug_log"])) {
+            // "on"/"off" are internally translated into "1"/"" (empty string)
+            $d = $ini_array["debug_log"];
+            $this->debug_log = $d === "1" || $d === "on";
         }
 
         $this->basename = "jx_{$this->platform}{$this->arch}v8";

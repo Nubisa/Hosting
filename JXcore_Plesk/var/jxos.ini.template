@@ -9,3 +9,8 @@
 ; 32, 64
 ; For example:
 ; arch = 32
+
+; Enable debug.log recreated on each tab refresh.
+; Supported values: on, off
+; Default is Off
+; debug_log = off
