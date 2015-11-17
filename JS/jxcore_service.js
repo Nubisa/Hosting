@@ -122,7 +122,11 @@ var srv = https.createServer(options, function (req, res) {
         }
 
 //        fs.writeFileSync("/tmp/parsed.txt", JSON.stringify(parsed, null, 4));
-        fs.unlinkSync(fname);
+        try {
+            fs.unlinkSync(fname);
+        } catch(ex) {
+            console.log('Cannot unlink', fname, ex);
+        }
 
         var method = null;
         if (parsed.query.modules == "install") method = npmModules_install;
