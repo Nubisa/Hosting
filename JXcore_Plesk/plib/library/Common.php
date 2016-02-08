@@ -2773,6 +2773,7 @@ class NPMModules {
             'column-2' => array(
                 'title' => 'Module name',
                 'noEscape' => true,
+                'searchable' => true
             ),
             'column-3' => array(
                 'title' => 'module version',
@@ -2781,6 +2782,7 @@ class NPMModules {
             'column-4' => array(
                 'title' => 'Description',
                 'noEscape' => true,
+                'searchable' => true
             ),
             'column-5' => array(
                 'title' => 'Remove',
@@ -2793,7 +2795,7 @@ class NPMModules {
         );
 
         $list->setColumns($columns);
-        $list->setDataUrl(array('action' => 'listdomains-data'));
+        $list->setDataUrl(array('action' => 'listmodules-data'));
 
         return $data;
     }

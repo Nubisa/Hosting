@@ -589,13 +589,11 @@ class DomainController extends pm_Controller_Action
 
     public function listmodulesDataAction()
     {
-        if (!$this->check())
-            return;
-
-        if (!$this->allowNPMInstall)
-            return;
-
+        $this->view->list = null;
         $this->listmodulesAction();
+        if (!$this->view->list)
+            return;
+
         $this->_helper->json($this->view->list->fetchData());
     }
 }
