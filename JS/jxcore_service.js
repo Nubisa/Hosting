@@ -10,6 +10,7 @@ var http = require("http");
 var url = require("url");
 var util = require("util");
 var root_functions = require("./root_functions.js");
+var logFiles = require("./logFiles.js");
 var semver = require('semver');
 
 var npmModulesLatestVersions = {};
@@ -20,6 +21,9 @@ var psaadm = 'psaadm';
 var psaadm_uid = root_functions.getUID(psaadm);
 var psaadm_gid = root_functions.getUID(psaadm, true);
 var modulesDir = path.normalize(jxconfig.globalModulePath + "/node_modules/");
+
+logFiles.psaadm_uid = psaadm_uid;
+logFiles.psaadm_gid = psaadm_gid;
 
 var errors = [];
 
@@ -351,8 +355,14 @@ var npmModules_check = function (parsed, checkModuleName) {
         return { err: 'Wrong user name.'};
 
     ret.moduleName = parsed.query.name;
-    if (checkModuleName && !ret.moduleName)
-        return { err: 'Wrong module name.'};
+    if (checkModuleName) {
+        if (!ret.moduleName)
+            return { err: 'Wrong module name.'};
+
+        // remove -g and --global
+        ret.moduleName = (ret.moduleName + ' ').replace(/\s-g\s/gi, ' ').replace(/\s--global\s/gi, ' ');
+        ret.moduleName = ret.moduleName.trim();
+    }
 
     ret.modulesDir = path.join(ret.baseDir, 'node_modules');
 
@@ -366,60 +376,58 @@ var npmModules_check = function (parsed, checkModuleName) {
 var npmModules_install = function (parsed, cb) {
 
     var errorAnswer = null;
+    var npmFiles = null;
     try {
         var ret = npmModules_check(parsed, true);
         if (ret.err)
             return cb(ret.err);
 
-        var namesToInstall = parsed.query.name.toString().replace(/ -g/gi, '').replace(/ --global/gi, '');
+        var namesToInstall = ret.moduleName;
 
         if (!fs.existsSync(ret.modulesDir))
             fs.mkdirSync(ret.modulesDir);
 
         root_functions.chownSyncRecursive(ret.modulesDir, ret.userName);
 
-        var npmlog = path.join(ret.baseDir, 'npm-debug.log');
-        if (fs.existsSync(npmlog))
-            fs.unlinkSync(npmlog);
+        npmFiles = logFiles.get(ret, true);
 
-        var cmd = util.format('cd "%s"; "%s" install %s --no-bin-links', ret.baseDir, process.execPath, namesToInstall);
-//        console.log("Installing npm module. name:", parsed.query.name, "namesToInstall:", namesToInstall, "with cmd: ", cmd, "\n");
-        var cmdResult = jxcore.utils.cmdSync(cmd);
+        var args = [ 'install' ]
+            .concat(namesToInstall.split(' '))
+            .concat(['--no-bin-links', '--unsafe-perm', '--loglevel', 'error', '--jx-use-exec-path']);
+        var opts = { cwd : ret.baseDir, maxBuffer : 1e7 };
+        var cmd = process.execPath + args.join(' ');
+        var cmdResult = '';
 
-        // chmod + chown for installed modules
-        var files = fs.readdirSync(ret.modulesDir);
+        console.log('executing:', process.execPath, args.join(' '));
+        var child = require('child_process').spawn(process.execPath, args, opts);
+        child.stdout.on('data', function(chunk) {
+            cmdResult += chunk;
+            console.log(chunk + '');
+        });
 
-        for (var a = 0, len = files.length; a < len; a++) {
-            var _mod = path.join(ret.modulesDir, files[a]);
-            var _stat = fs.statSync(_mod);
-//            console.log(_mod, _stat.isDirectory());
-            if (!_stat.isDirectory())
-                continue;
+        child.stderr.on('data', function(chunk) {
+            cmdResult += chunk;
+            jxcore.utils.console.error(chunk + '');
+        });
 
-            root_functions.chownSyncRecursive(_mod, ret.userName, _stat);
+        child.on('close', function(code) {
 
-            var _mark = path.join(_mod, '_jx_chmoded');
-            if (!fs.existsSync(_mark)) {
-                try {
-                    root_functions.chmodSyncRecursive(_mod);
-                    fs.writeFileSync(_mod, 'ok');
-                } catch (ex) {
-                    // ignore chmod errors for now
-                }
+            chownModuleFolder(ret.modulesDir, ret.userName);
+
+            if (npmFiles.exists()) {
+                npmFiles.append("jx install " + namesToInstall, cmd, cmdResult, ret);
+                errorAnswer = "Error" + cmdResult;
             }
-        }
 
-        if (fs.existsSync(npmlog)) {
-            fs.appendFileSync(npmlog, "\njx install " + namesToInstall + "\n");
-            fs.chownSync(npmlog, root_functions.getUID(psaadm), root_functions.getUID(psaadm, true));
-            errorAnswer = "Error" + cmdResult.out;
-        }
-        npmModules_checkForUpdates(parsed);
+            npmModules_checkForUpdates(parsed);
+            cb(errorAnswer);
+        });
+
     } catch (ex) {
         errorAnswer = ex.toString();
+        if (npmFiles) npmFiles.delete('all');
+        cb(errorAnswer);
     }
-
-    cb(errorAnswer);
 };
 
 
@@ -486,7 +494,7 @@ var npmModules_remove = function (parsed, cb) {
             npmModules_checkForUpdates(parsed);
 
     } catch (ex) {
-        errorAnswer = ex.toString()
+        errorAnswer = ex.toString();
     }
 
     cb(errorAnswer);
@@ -495,21 +503,20 @@ var npmModules_remove = function (parsed, cb) {
 var npmModules_removeLog = function (parsed, cb) {
 
     var errorAnswer = null;
+    var npmFiles = null;
     try {
 
         var ret = npmModules_check(parsed);
         if (ret.err)
             return cb(ret.err);
 
-        var file = path.join(ret.baseDir, 'npm-debug.log');
-        if (fs.existsSync(file))
-            fs.unlinkSync(file);
-
-        if (fs.existsSync(file))
-            errorAnswer = "Could not remove the file.";
+        npmFiles = logFiles.get(ret, false);
+        var del = npmFiles.delete();
+        if (del)
+            errorAnswer = del;
 
     } catch (ex) {
-        errorAnswer = ex.toString()
+        errorAnswer = ex.toString();
     }
 
     cb(errorAnswer);
@@ -519,6 +526,7 @@ var npmModules_removeLog = function (parsed, cb) {
 var npmModules_checkForUpdates = function (parsed, cb) {
 
     var errorAnswer = null;
+    var npmFiles = null;
     try {
 
         var ret = npmModules_check(parsed);
@@ -531,11 +539,8 @@ var npmModules_checkForUpdates = function (parsed, cb) {
 
         var folders = fs.readdirSync(ret.modulesDir);
 
-        var npmlog = path.join(ret.baseDir, 'npm-debug.log');
-        var npmlog_backup = path.join(ret.baseDir, 'npm-debug.log.backup');
-        // backing up npm-debug.log
-        if (fs.existsSync(npmlog))
-            fs.renameSync(npmlog, npmlog_backup);
+        npmFiles = logFiles.get(ret, false);
+        npmFiles.backup();
 
         npmModulesLatestVersions.__checking_in_progress = true;
         for (var a = 0, len = folders.length; a < len; a++) {
@@ -591,22 +596,17 @@ var npmModules_checkForUpdates = function (parsed, cb) {
         npmModulesLatestVersions.__checking_in_progress = false;
 
     } catch (ex) {
-        errorAnswer = ex.toString()
+        errorAnswer = ex.toString();
     }
 
-    try {
-        // restoring from backup npm-debug.log
-        if (fs.existsSync(npmlog_backup))
-            fs.renameSync(npmlog_backup, npmlog);
-    } catch (ex) {
-    }
-
+    if (npmFiles) npmFiles.restore();
     if (cb) cb(errorAnswer);
 };
 
 var npmModules_update = function (parsed, cb) {
 
     var errorAnswer = null;
+    var npmFiles = null;
     try {
         var ret = npmModules_check(parsed, true);
         if (ret.err)
@@ -615,61 +615,87 @@ var npmModules_update = function (parsed, cb) {
         if (!fs.existsSync(ret.modulesDir))
             return cb("OK");
 
-        var nameForUpdate = parsed.query.name;
+        var nameForUpdate = ret.moduleName;
         if (nameForUpdate === "_all_") nameForUpdate = "";
 
         root_functions.chownSyncRecursive(ret.modulesDir, ret.userName);
 
-        var npmlog = path.join(ret.baseDir, 'npm-debug.log');
-        if (fs.existsSync(npmlog))
-            fs.unlinkSync(npmlog);
+        npmFiles = logFiles.get(ret, true);
 
-        var cmd = util.format('cd "%s"; "%s" npm update %s --no-bin-links', ret.baseDir, process.execPath, nameForUpdate);
-        var cmdResult = jxcore.utils.cmdSync(cmd);
-        console.log("Updating npm module. name:", nameForUpdate, "with cmd: ", cmd);
-        console.log(cmdResult);
+        // design of "npm update jxm" has been changed (visible in 3.3.12),
+        // therefore it is better to call "jx install jxm"
+        var args = nameForUpdate ? [ 'install' ] : [ 'npm', 'update' ];
 
-        // chmod + chown for installed modules
-        var files = fs.readdirSync(ret.modulesDir);
+        var args = args
+            .concat(nameForUpdate.split(' '))
+            .concat(['--no-bin-links', '--unsafe-perm', '--loglevel', 'error', '--jx-use-exec-path']);
 
-        for (var a = 0, len = files.length; a < len; a++) {
-            var _mod = path.join(ret.modulesDir, files[a]);
-            var _stat = fs.statSync(_mod);
-//            console.log(_mod, _stat.isDirectory());
-            if (!_stat.isDirectory())
-                continue;
+        var opts = { cwd : ret.baseDir, maxBuffer : 1e7 };
+        var cmd = process.execPath + args.join(' ');
+        var cmdResult = '';
 
-            root_functions.chownSyncRecursive(_mod, ret.userName, _stat);
+        console.log('executing:', process.execPath, args.join(' '));
+        var child = require('child_process').spawn(process.execPath, args, opts);
+        child.stdout.on('data', function(chunk) {
+            cmdResult += chunk;
+            console.log(chunk + '');
+        });
 
-            var _mark = path.join(_mod, '_jx_chmoded');
-            if (!fs.existsSync(_mark)) {
-                try {
-                    root_functions.chmodSyncRecursive(_mod);
-                    fs.writeFileSync(_mod, 'ok');
-                } catch (ex) {
-                    // ignore chmod errors for now
-                }
+        child.stderr.on('data', function(chunk) {
+            cmdResult += chunk;
+            jxcore.utils.console.error(chunk + '');
+        });
+
+        child.on('close', function(code) {
+
+            chownModuleFolder(ret.modulesDir, ret.userName);
+
+            if (npmFiles.exists()) {
+                npmFiles.append("jx npm update " + nameForUpdate, cmd, cmdResult, ret);
+                errorAnswer = "Error" + cmdResult;
             }
-        }
 
-        if (fs.existsSync(npmlog)) {
-            fs.appendFileSync(npmlog, "\njx update " + namesToInstall + "\n");
-            fs.chownSync(npmlog, root_functions.getUID(psaadm), root_functions.getUID(psaadm, true));
-            errorAnswer = "Error" + cmdResult.out;
-        } else {
-            if (cmdResult.exitCode)
-                errorAnswer = cmdResult.out;
-        }
-
-        npmModules_checkForUpdates(parsed);
+            npmModules_checkForUpdates(parsed);
+            cb(errorAnswer);
+        });
 
     } catch (ex) {
         errorAnswer = ex.toString();
+        if (npmFiles) npmFiles.delete('all');
+        cb(errorAnswer);
     }
-
-    cb(errorAnswer);
 };
 
+
+/**
+ *
+ * @param modulesDir - a 'node_modules' either for domain or main for extension
+ * @param userName
+ */
+var chownModuleFolder = function(modulesDir, userName) {
+
+    // chmod + chown for installed modules
+    var files = fs.readdirSync(modulesDir);
+
+    for (var a = 0, len = files.length; a < len; a++) {
+        var _mod = path.join(modulesDir, files[a]);
+        var _stat = fs.statSync(_mod);
+        if (!_stat.isDirectory())
+            continue;
+
+        root_functions.chownSyncRecursive(_mod, userName, _stat);
+
+        var _mark = path.join(_mod, '_jx_chmoded');
+        if (!fs.existsSync(_mark)) {
+            try {
+                root_functions.chmodSyncRecursive(_mod);
+                fs.writeFileSync(_mod, 'ok');
+            } catch (ex) {
+                // ignore chmod errors for now
+            }
+        }
+    }
+};
 
 
 // 30 minutes
