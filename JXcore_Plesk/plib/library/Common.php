@@ -975,7 +975,7 @@ class Modules_JxcoreSupport_Common
         $ret = Modules_JxcoreSupport_Common::getURL($url, $out);
         $out = trim(htmlspecialchars($out));
         $ok = str_replace("\n", "<br>", "$out") == "OK";
-        $err = $ret ? $out: "Cannot connect to JXcore service.";
+        $err = $ret ? $out : "Cannot connect to JXcore service.";
         $msg = $ok ? $msgOK : ($msgErr ? "$msgErr $err" : null);
         if ($msg && $return !== "silent") {
             $msg = str_replace("#arg#", $arg, $msg);
@@ -2472,7 +2472,7 @@ class JXcoreLatestVersionInfo {
         if (!Modules_JxcoreSupport_Common::$jxv)
             return;
 
-        $remove = array("v ", "Beta-");
+        $remove = array("v ", "Beta-", "v");
         $this->localNumber = trim(str_replace( $remove, "", Modules_JxcoreSupport_Common::$jxv));
         $this->remoteNumber = trim(str_replace($remove, "", $this->version));
 
@@ -2620,6 +2620,7 @@ class NPMModules {
         $this->dir_node_modules = $this->dir_base . "node_modules/";
         $nameToInstall = trim($req->getParam("names"));
         $npmlog = $this->dir_base . "npm-debug.log";
+        $npmout = $this->dir_base . "command.log";
 
         // if domain is not provided this is an admin anyway
         $sysUser = $domain ? $domain->sysUser : 'psaadm';
@@ -2631,7 +2632,7 @@ class NPMModules {
             if ($logCommand === 'remove') {
                 Modules_JxcoreSupport_Common::callService("modules", "removeLog{$uri}", "The npm-debug.log was successfully removed.", "Cannot remove npm-debug.log file.");
             } else {
-                $view->logDiv = $this->getLogDiv($npmlog);
+                $view->logDiv = $this->getLogDiv($npmlog, $npmout);
 //                $btnRemove = Modules_JxcoreSupport_Common::getSimpleButton("logCommand", "Remove", "remove", Modules_JxcoreSupport_Common::iconUrlDelete, null, $style);
             }
         }
@@ -2692,7 +2693,7 @@ class NPMModules {
                 $str_err = "There were some errors. See below for details.";
                 $ret = Modules_JxcoreSupport_Common::callService("modules", "install&name={$nameToInstall}{$uri}", $str_ok, $str_err, "silent");
                 if ($ret)
-                    StatusMessage::infoOrError($ret !== "OK", $str_ok, $str_err);
+                    StatusMessage::infoOrError($ret !== "OK", $str_ok, file_exists($npmlog) ? $str_err : $ret);
             }
 
             $helper->json(array('redirect' => $domain ? Modules_JxcoreSupport_Common::$urlDomainModules : Modules_JxcoreSupport_Common::$urlJXcoreModules));
@@ -2798,7 +2799,7 @@ class NPMModules {
     }
 
 
-    private function getLogDiv($npmlog) {
+    private function getLogDiv($npmlog, $npmout) {
 
         $html = '
 <div id="sites-active-list" class="active-list active-list-collapsible">
@@ -2858,16 +2859,33 @@ class NPMModules {
 </div>
         ';
 
-        $log = trim(file_get_contents($npmlog));
+        $log = '';
+        $hr = '#HR#';
+        // adding cmd output log before npm-debug.log
+        if (file_exists($npmout))
+            $log .= "#INFO#log file: {$npmout}\n" . trim(file_get_contents($npmout)) . "\n$hr";
+
+        $log .= "#INFO#log file: {$npmlog}\n\n" .trim(file_get_contents($npmlog));
+
         $log = htmlspecialchars($log);
         $arr = explode("\n", $log);
-        $len = count($arr);
-        $cmd = strpos($arr[$len-1], "jx install") === 0 ? trim($arr[$len-1]) : "unknown";
+        $cmd = "unknown";
 
         foreach($arr as $key => $line) {
-            if (strpos($line, ' error ') !== false) $arr[$key] = StatusMessage::orange($line);
+            $errpos = strpos($line, ' error ');
+            if ($errpos >0 && $errpos <5) $arr[$key] = StatusMessage::orange($line);
+
+            if (strpos($line, 'npm ERR! ') !== false) $arr[$key] = StatusMessage::orange($line);
             if (strpos($line, ' info ') !== false) $arr[$key] = StatusMessage::green($line);
+            if (strpos($line, ' warn ') !== false) $arr[$key] = Modules_JxcoreSupport_Common::getHTMLTag("span", $line, null, "color:magenta");
+            if (strpos($line, ' verbose ') !== false) $arr[$key] = Modules_JxcoreSupport_Common::getHTMLTag("span", $line, null, "color:blue");
             if (strpos($line, ' silly ') !== false) $arr[$key] = Modules_JxcoreSupport_Common::getHTMLTag("span", $line, null, "color:darkgray");
+
+            if (strpos($line, 'npm JXcore ') !== false || strpos($line, 'gyp JXcore ') !== false)
+                $arr[$key] = Modules_JxcoreSupport_Common::getHTMLTag("span", $line, null, "color:dodgerblue");
+
+            if (strpos($line, "#INFO#command:") === 0)
+                $cmd = trim(str_replace('#INFO#command: ', '', $line));
         }
 
         $log = implode('<br>', $arr);
@@ -2879,11 +2897,18 @@ class NPMModules {
         ';
         $div = str_replace("#log#", $log, $div);
 
-        $btnRemove = Modules_JxcoreSupport_Common::getSimpleButton("logCommand", "Remove log file", "remove", Modules_JxcoreSupport_Common::iconUrlDelete, null, "margin: 0px;", "Are you sure? The file will be permanently removed.");
+        $bname = basename($npmlog);
+        $bnameID = str_replace(array( '.', '_', ' '), '-', $bname);
+
+        $btnRemove = Modules_JxcoreSupport_Common::getSimpleButton("logCommand", "Remove log files", "remove" , Modules_JxcoreSupport_Common::iconUrlDelete, null, "margin: 0px;", "Are you sure? The file will be permanently removed.");
         $html = str_replace("#remove_btn#", $btnRemove, $html);
         $html = str_replace("#div#", $div, $html);
         $html = str_replace("#file_date#", date ("F d Y H:i:s", filemtime($npmlog)), $html);
         $html = str_replace("#cmd#", $cmd , $html);
+        $html = str_replace("#basename#", $bname, $html);
+        $html = str_replace("#ID#", $bnameID, $html);
+        $html = str_replace("#INFO#", '<img style="margin-right: 5px; margin-top: -3px;" src="/theme//icons/16/plesk/info.png" alt="">', $html);
+        $html = str_replace($hr, '<hr>', $html);
         return $html;
     }
 }

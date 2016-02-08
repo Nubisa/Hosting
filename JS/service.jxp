@@ -14,6 +14,7 @@
 	"files": [
 		"folderWatch.js",
 		"jxcore_service.js",
+		"logFiles.js",
 		"nginxWatch.js",
 		"nginxconf.js",
 		"node_modules/chokidar/index.js",
