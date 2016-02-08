@@ -202,7 +202,11 @@ class IndexController extends pm_Controller_Action
     public function jxcoresiteAction() {
         if ($this->redirect(true)) return;
         $str = "";
-        Modules_JxcoreSupport_Common::getURL("https://nodejx.s3.amazonaws.com/plesk_help.html", $str);
+        Modules_JxcoreSupport_Common::getURL("https://nodejx.s3.amazonaws.com/plesk_help_new.html", $str);
+        if (strpos($str, "__VERSION__") !== false) {
+            $newVersion = new JXcoreLatestVersionInfo(false);
+            $str = str_replace("__VERSION__", $newVersion->version, $str);
+        }
         $this->view->jxcoreSiteContents = $str;
     }
 
